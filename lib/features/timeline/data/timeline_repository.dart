@@ -27,7 +27,9 @@ class TimelineRepository {
 
     print('=== TAREFAS PARA TIMELINE ===');
     for (final t in tarefas) {
-      print('id=${t.tarefa.id} origemTipo=${t.tarefa.origemTipo} origemId=${t.tarefa.origemId} chamadoRef=${t.tarefa.chamadoRef}');
+      print(
+        'id=${t.tarefa.id} origemTipo=${t.tarefa.origemTipo} origemId=${t.tarefa.origemId} chamadoRef=${t.tarefa.chamadoRef}',
+      );
     }
     print('=============================');
 
@@ -41,7 +43,9 @@ class TimelineRepository {
 
     print('=== ITENS MONTADOS PARA TIMELINE ===');
     for (final item in itens) {
-      print('TimelineItem: id=${item.id} tipoOrigem=${item.tipoOrigem} origemId=${item.origemId} titulo=${item.titulo}');
+      print(
+        'TimelineItem: id=${item.id} tipoOrigem=${item.tipoOrigem} origemId=${item.origemId} titulo=${item.titulo}',
+      );
     }
     print('====================================');
 
@@ -52,18 +56,23 @@ class TimelineRepository {
   bool _tarefaDeveEntrarNaTimeline(TarefaDetalhe item) {
     final origemTipo = (item.tarefa.origemTipo ?? '').trim().toLowerCase();
 
+    // Projeto pode chegar como "cronograma" ou "projeto".
     if (origemTipo == 'cronograma' || origemTipo == 'projeto') {
       return item.tarefa.origemId != null;
     }
 
+    // Para chamado, aceitamos:
+    // - origemId preenchido, ou
+    // - chamadoRef preenchido, que será convertido em origemId no mapeamento.
     if (origemTipo == 'chamado') {
-      return item.tarefa.origemId != null ||
-          (item.tarefa.chamadoRef ?? '').trim().isNotEmpty;
+      final chamadoRefTexto = (item.tarefa.chamadoRef ?? '').trim();
+      final chamadoRefNumero = int.tryParse(chamadoRefTexto);
+
+      return item.tarefa.origemId != null || chamadoRefNumero != null;
     }
 
     return false;
   }
-
 
   TimelineItem _mapTarefaParaTimeline(TarefaDetalhe item) {
     final tarefa = item.tarefa;
@@ -96,6 +105,14 @@ class TimelineRepository {
       fim = DateTime.now().add(const Duration(hours: 1));
     }
 
+    final origemTipoNormalizada =
+    (tarefa.origemTipo ?? 'geral').trim().toLowerCase();
+
+    final origemIdResolvido = origemTipoNormalizada == 'chamado'
+        ? (tarefa.origemId ??
+        int.tryParse((tarefa.chamadoRef ?? '').trim()))
+        : tarefa.origemId;
+
     return TimelineItem(
       id: 'tarefa_${tarefa.id ?? 0}',
       titulo: tarefa.titulo,
@@ -109,10 +126,10 @@ class TimelineRepository {
       descricao: tarefa.descricao.isNotEmpty
           ? tarefa.descricao
           : (tarefa.observacoes ?? '-'),
-      tipoOrigem: ((tarefa.origemTipo ?? 'geral').trim().toLowerCase() == 'projeto')
+      tipoOrigem: origemTipoNormalizada == 'projeto'
           ? 'cronograma'
-          : (tarefa.origemTipo ?? 'geral').trim().toLowerCase(),
-      origemId: tarefa.origemId,
+          : origemTipoNormalizada,
+      origemId: origemIdResolvido,
     );
   }
 
@@ -134,7 +151,21 @@ class TimelineRepository {
 
   TimelineItem _mapCronogramaParaTimeline(CronogramaProjeto projeto) {
     final inicio = projeto.inicio ?? DateTime.now();
-    final fim = projeto.termino ?? inicio;
+
+    DateTime fim;
+    if (projeto.termino == null) {
+      fim = inicio;
+    } else {
+      final terminoNormalizado = DateTime(
+        projeto.termino!.year,
+        projeto.termino!.month,
+        projeto.termino!.day,
+        projeto.termino!.hour,
+        projeto.termino!.minute,
+      );
+
+      fim = terminoNormalizado.isBefore(inicio) ? inicio : terminoNormalizado;
+    }
 
     return TimelineItem(
       id: 'cronograma_${projeto.id ?? 0}',

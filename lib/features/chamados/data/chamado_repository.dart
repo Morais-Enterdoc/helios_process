@@ -106,29 +106,41 @@ class ChamadoRepository {
     };
   }
 
-  Chamado _mapToChamado(Map<String, dynamic> map) {
+  Chamado _mapToChamado(Map map) {
+    final idResolvido = _resolverIdChamado(map);
+
     return Chamado(
-      ticket: map['ticket'] ?? '',
-      cliente: map['cliente'] ?? '',
-      solicitante: map['solicitante'] ?? '',
-      assunto: map['assunto'] ?? '',
-      descricao: map['descricao'] ?? '',
-      numeroRo: map['numero_ro'] ?? '',
-      categoria: map['categoria'] ?? '',
-      status: map['status'] ?? '',
-      servico: map['servico'] ?? '',
-      dataAbertura: map['data_abertura'] ?? '',
-      ultimaAtualizacao: map['ultima_atualizacao'] ?? '',
-      agenteAtual: map['agente_atual'] ?? '',
-      equipeAtual: map['equipe_atual'] ?? '',
-      anotacoes: map['anotacoes'] ?? '',
-      meuStatus: map['meu_status'] ?? '',
-      anexos: _parseAnexos(map['anexos']),
+      id: idResolvido,
+      ticket: map['ticket']?.toString() ?? '',
+      cliente: map['cliente']?.toString() ?? '',
+      solicitante: map['solicitante']?.toString() ?? '',
+      assunto: map['assunto']?.toString() ?? '',
+      descricao: map['descricao']?.toString() ?? '',
+      numeroRo: map['numero_ro']?.toString() ?? '',
+      categoria: map['categoria']?.toString() ?? '',
+      status: map['status']?.toString() ?? '',
+      servico: map['servico']?.toString() ?? '',
+      dataAbertura: map['data_abertura']?.toString() ?? '',
       prazoEntrega: _resolverPrazoEntrega(
         map['data_abertura']?.toString() ?? '',
         map['prazo_entrega']?.toString() ?? '',
       ),
+      ultimaAtualizacao: map['ultima_atualizacao']?.toString() ?? '',
+      agenteAtual: map['agente_atual']?.toString() ?? '',
+      equipeAtual: map['equipe_atual']?.toString() ?? '',
+      anotacoes: map['anotacoes']?.toString() ?? '',
+      meuStatus: map['meu_status']?.toString() ?? '',
+      anexos: _parseAnexos(map['anexos']),
     );
+  }
+
+  int? _resolverIdChamado(Map map) {
+    final valorId = map['id'];
+    if (valorId is int) return valorId;
+    if (valorId is String) return int.tryParse(valorId);
+
+    final ticket = map['ticket']?.toString().trim() ?? '';
+    return int.tryParse(ticket);
   }
 
   String _resolverPrazoEntrega(String dataAbertura, String prazoEntrega) {

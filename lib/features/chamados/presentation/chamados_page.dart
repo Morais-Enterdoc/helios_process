@@ -1,11 +1,17 @@
 import 'package:flutter/material.dart';
-import '../domain/chamado.dart';
-import '../domain/chamado_import_service.dart';
 import 'package:file_picker/file_picker.dart';
+import 'package:file_selector/file_selector.dart';
+import 'package:path_provider/path_provider.dart';
+import 'package:pdf/pdf.dart';
+import 'package:pdf/widgets.dart' as pw;
+import 'package:flutter/services.dart';
+import 'package:excel/excel.dart' as excel;
 import 'dart:convert';
 import 'dart:io';
-import 'package:path_provider/path_provider.dart';
+
 import '../data/chamado_repository.dart';
+import '../domain/chamado.dart';
+import '../domain/chamado_import_service.dart';
 
 class ChamadosPage extends StatefulWidget {
   final Future<void> Function()? onChamadosAlterados;
@@ -29,6 +35,7 @@ class _ChamadosPageState extends State<ChamadosPage> {
   final TextEditingController descricaoController = TextEditingController();
   final TextEditingController prazoController = TextEditingController();
   final TextEditingController roController = TextEditingController();
+  final TextEditingController dataAtualizacaoController = TextEditingController();
   final ChamadoImportService _importService = ChamadoImportService();
   final ChamadoRepository chamadoRepository = ChamadoRepository();
   final TextEditingController anotacoesController = TextEditingController();
@@ -61,6 +68,33 @@ class _ChamadosPageState extends State<ChamadosPage> {
     'statusAtual': 140,
     'abertura': 120,
   };
+
+  final TextInputFormatter dataInputFormatter = TextInputFormatter.withFunction((
+      oldValue,
+      newValue,
+      ) {
+    final numeros = newValue.text.replaceAll(RegExp(r'[^0-9]'), '');
+
+    if (numeros.length > 8) {
+      return oldValue;
+    }
+
+    final buffer = StringBuffer();
+
+    for (int i = 0; i < numeros.length; i++) {
+      if (i == 2 || i == 4) {
+        buffer.write('/');
+      }
+      buffer.write(numeros[i]);
+    }
+
+    final textoFormatado = buffer.toString();
+
+    return TextEditingValue(
+      text: textoFormatado,
+      selection: TextSelection.collapsed(offset: textoFormatado.length),
+    );
+  });
 
   String _normalizarMeuStatus(String valor) {
     switch (valor.trim()) {
@@ -133,6 +167,7 @@ class _ChamadosPageState extends State<ChamadosPage> {
     prazoController.dispose();
     roController.dispose();
     anotacoesController.dispose();
+    dataAtualizacaoController.dispose();
     filtroChamadoController.dispose();
     filtroClienteController.dispose();
     filtroAssuntoController.dispose();
@@ -373,12 +408,155 @@ class _ChamadosPageState extends State<ChamadosPage> {
                             ),
                             const SizedBox(height: 16),
 
-                            _buildTextField(
-                              controller: anotacoesController,
-                              label: 'Minhas anotações',
-                              hint: 'Registre análises, decisões e próximos passos',
-                              maxLines: 5,
-                              required: false,
+                            Container(
+                              width: double.infinity,
+                              padding: const EdgeInsets.all(16),
+                              decoration: BoxDecoration(
+                                color: const Color(0xFFF8FAFC),
+                                borderRadius: BorderRadius.circular(16),
+                                border: Border.all(
+                                  color: const Color(0xFFE5E7EB),
+                                ),
+                              ),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Row(
+                                    children: [
+                                      const Expanded(
+                                        child: Text(
+                                          'Histórico do chamado',
+                                          style: TextStyle(
+                                            fontSize: 14,
+                                            fontWeight: FontWeight.w700,
+                                            color: Color(0xFF374151),
+                                          ),
+                                        ),
+                                      ),
+                                      TextButton.icon(
+                                        onPressed: chamadoSelecionado?.anotacoes.trim().isNotEmpty == true
+                                            ? () {
+                                          setState(() {
+                                            chamadoSelecionado = chamadoSelecionado!.copyWith(
+                                              anotacoes: '',
+                                            );
+                                          });
+                                          dialogSetState(() {});
+                                        }
+                                            : null,
+                                        icon: const Icon(
+                                          Icons.delete_sweep_outlined,
+                                          size: 18,
+                                        ),
+                                        label: const Text('Limpar histórico'),
+                                        style: TextButton.styleFrom(
+                                          foregroundColor: const Color(0xFFDC2626),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                  const SizedBox(height: 10),
+
+                                  Builder(
+                                    builder: (context) {
+                                      final historicoTexto = chamadoSelecionado?.anotacoes.trim() ?? '';
+                                      final linhasHistorico = historicoTexto.isEmpty
+                                          ? <String>[]
+                                          : historicoTexto.split('\n');
+
+                                      if (linhasHistorico.isEmpty) {
+                                        return const Text(
+                                          'Nenhuma atualização salva até o momento.',
+                                          style: TextStyle(
+                                            fontSize: 13,
+                                            height: 1.5,
+                                            color: Color(0xFF6B7280),
+                                          ),
+                                        );
+                                      }
+
+                                      return Column(
+                                        children: linhasHistorico.asMap().entries.map((entry) {
+                                          final indice = entry.key;
+                                          final linha = entry.value;
+
+                                          return Padding(
+                                            padding: const EdgeInsets.only(bottom: 8),
+                                            child: Row(
+                                              crossAxisAlignment: CrossAxisAlignment.start,
+                                              children: [
+                                                Expanded(
+                                                  child: Text(
+                                                    linha,
+                                                    style: const TextStyle(
+                                                      fontSize: 13,
+                                                      height: 1.5,
+                                                      color: Color(0xFF6B7280),
+                                                    ),
+                                                  ),
+                                                ),
+                                                const SizedBox(width: 8),
+                                                IconButton(
+                                                  tooltip: 'Remover esta linha',
+                                                  visualDensity: VisualDensity.compact,
+                                                  padding: EdgeInsets.zero,
+                                                  constraints: const BoxConstraints(),
+                                                  icon: const Icon(
+                                                    Icons.delete_outline,
+                                                    size: 18,
+                                                    color: Color(0xFFDC2626),
+                                                  ),
+                                                  onPressed: () {
+                                                    final novasLinhas = List<String>.from(linhasHistorico)
+                                                      ..removeAt(indice);
+
+                                                    dialogSetState(() {
+                                                      chamadoSelecionado = chamadoSelecionado!.copyWith(
+                                                        anotacoes: novasLinhas.join('\n'),
+                                                      );
+                                                    });
+
+                                                    setState(() {});
+                                                  },
+                                                ),
+                                              ],
+                                            ),
+                                          );
+                                        }).toList(),
+                                      );
+                                    },
+                                  ),
+                                ],
+                              ),
+                            ),
+
+                            const SizedBox(height: 16),
+
+                            Row(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                SizedBox(
+                                  width: 180,
+                                  child: _buildTextField(
+                                    controller: dataAtualizacaoController,
+                                    label: 'Data',
+                                    hint: 'dd/mm/aaaa',
+                                    required: false,
+                                    keyboardType: TextInputType.number,
+                                    inputFormatters: [dataInputFormatter],
+                                  ),
+                                ),
+                                const SizedBox(width: 16),
+                                Expanded(
+                                  child: _buildTextField(
+                                    controller: anotacoesController,
+                                    label: 'Descrição da atualização',
+                                    hint: 'Digite a atualização do chamado',
+                                    maxLines: 1,
+                                    required: false,
+                                  ),
+                                ),
+                              ],
                             ),
                             const SizedBox(height: 20),
 
@@ -724,8 +902,6 @@ class _ChamadosPageState extends State<ChamadosPage> {
     );
   }
 
-
-
   void carregarChamadoParaEdicao(Chamado chamado) {
     numeroChamadoController.text = chamado.ticket;
     clienteController.text = chamado.cliente;
@@ -733,8 +909,10 @@ class _ChamadosPageState extends State<ChamadosPage> {
     descricaoController.text = chamado.descricao;
     prazoController.text = chamado.prazoEntrega;
     roController.text = chamado.numeroRo;
-    anotacoesController.text = chamado.anotacoes;
     statusController.text = chamado.status;
+
+    dataAtualizacaoController.clear();
+    anotacoesController.clear();
 
     final tiposSolicitacaoValidos = [
       'Correção',
@@ -775,8 +953,31 @@ class _ChamadosPageState extends State<ChamadosPage> {
     });
   }
 
-  Future<void> salvarAlteracoesChamadoSelecionado() async {
+  Future salvarAlteracoesChamadoSelecionado() async {
     if (chamadoSelecionado == null) return;
+
+    final textoNovaAtualizacao = anotacoesController.text.trim();
+    final historicoAtual = chamadoSelecionado!.anotacoes.trim();
+    final dataInformada = dataAtualizacaoController.text.trim();
+
+    final agora = DateTime.now();
+    final horaAtual =
+        '${agora.hour.toString().padLeft(2, '0')}:'
+        '${agora.minute.toString().padLeft(2, '0')}';
+
+    final dataAtualizacao = dataInformada.isNotEmpty
+        ? dataInformada
+        : '${agora.day.toString().padLeft(2, '0')}/'
+        '${agora.month.toString().padLeft(2, '0')}/'
+        '${agora.year}';
+
+    final dataHoraAtualizacao = '$dataAtualizacao $horaAtual';
+
+    final novoHistorico = textoNovaAtualizacao.isEmpty
+        ? historicoAtual
+        : historicoAtual.isEmpty
+        ? '[$dataHoraAtualizacao] [$meuStatusSelecionado] $textoNovaAtualizacao'
+        : '$historicoAtual\n[$dataHoraAtualizacao] [$meuStatusSelecionado] $textoNovaAtualizacao';
 
     final chamadoAtualizado = chamadoSelecionado!.copyWith(
       ticket: numeroChamadoController.text.trim(),
@@ -787,8 +988,9 @@ class _ChamadosPageState extends State<ChamadosPage> {
       categoria: tipoSolicitacao,
       status: statusChamado,
       prazoEntrega: prazoController.text.trim(),
-      anotacoes: anotacoesController.text.trim(),
+      anotacoes: novoHistorico,
       meuStatus: meuStatusSelecionado,
+      ultimaAtualizacao: dataHoraAtualizacao,
     );
 
     try {
@@ -799,7 +1001,11 @@ class _ChamadosPageState extends State<ChamadosPage> {
         await widget.onChamadosAlterados!();
       }
 
+      anotacoesController.clear();
+      dataAtualizacaoController.clear();
+
       if (!mounted) return;
+
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text('Chamado atualizado com sucesso!'),
@@ -807,7 +1013,9 @@ class _ChamadosPageState extends State<ChamadosPage> {
         ),
       );
 
-      setState(() => chamadoSelecionado = chamadoAtualizado);
+      setState(() {
+        chamadoSelecionado = chamadoAtualizado;
+      });
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -1082,6 +1290,244 @@ class _ChamadosPageState extends State<ChamadosPage> {
     }
   }
 
+  List<Map<String, String>> _montarDadosRelatorioChamados() {
+    String limparTextoPdf(
+        String valor, {
+          int maximo = 0,
+        }) {
+      var texto = valor.trim();
+
+      texto = texto
+          .replaceAll('–', '-')
+          .replaceAll('—', '-')
+          .replaceAll('•', '-')
+          .replaceAll('\r\n', ' ')
+          .replaceAll('\n', ' ')
+          .replaceAll('\r', ' ')
+          .replaceAll('\t', ' ');
+
+      texto = texto.replaceAll(RegExp(r'\s+'), ' ');
+
+      if (maximo > 0 && texto.length > maximo) {
+        texto = '${texto.substring(0, maximo)}...';
+      }
+
+      return texto;
+    }
+
+    return chamadosFiltrados.map((chamado) {
+      return {
+        'cliente': limparTextoPdf(chamado.cliente),
+        'numeroChamado': limparTextoPdf(chamado.ticket),
+        'numeroRo': limparTextoPdf(chamado.numeroRo),
+        'assunto': limparTextoPdf(chamado.assunto, maximo: 80),
+        'meuStatus': limparTextoPdf(_normalizarMeuStatus(chamado.meuStatus)),
+        'statusAtual': limparTextoPdf(chamado.status),
+        'abertura': limparTextoPdf(chamado.dataAbertura),
+        'prazoEntrega': limparTextoPdf(chamado.prazoEntrega),
+        'descricao': limparTextoPdf(chamado.descricao, maximo: 140),
+        'anotacoes': limparTextoPdf(chamado.anotacoes, maximo: 140),
+      };
+    }).toList();
+  }
+
+
+
+  Future<String?> _selecionarCaminhoSalvarArquivo({
+    required String nomeArquivo,
+    required String extensao,
+  }) async {
+    final local = await getSaveLocation(
+      suggestedName: nomeArquivo,
+      acceptedTypeGroups: [
+        XTypeGroup(
+          label: extensao.toUpperCase(),
+          extensions: [extensao],
+        ),
+      ],
+    );
+
+    return local?.path;
+  }
+
+  Future<File?> _exportarChamadosExcel() async {
+    final dados = _montarDadosRelatorioChamados();
+
+    final workbook = excel.Excel.createExcel();
+    final sheet = workbook['Status Chamados'];
+
+    sheet.appendRow([
+      excel.TextCellValue('Cliente'),
+      excel.TextCellValue('Número do chamado'),
+      excel.TextCellValue('Número da RO'),
+      excel.TextCellValue('Assunto'),
+      excel.TextCellValue('Meu Status'),
+      excel.TextCellValue('Status Atual'),
+      excel.TextCellValue('Abertura'),
+      excel.TextCellValue('Prazo de Entrega'),
+      excel.TextCellValue('Descrição'),
+      excel.TextCellValue('Minhas Anotações'),
+    ]);
+
+    for (final linha in dados) {
+      sheet.appendRow([
+        excel.TextCellValue(linha['cliente'] ?? ''),
+        excel.TextCellValue(linha['numeroChamado'] ?? ''),
+        excel.TextCellValue(linha['numeroRo'] ?? ''),
+        excel.TextCellValue(linha['assunto'] ?? ''),
+        excel.TextCellValue(linha['meuStatus'] ?? ''),
+        excel.TextCellValue(linha['statusAtual'] ?? ''),
+        excel.TextCellValue(linha['abertura'] ?? ''),
+        excel.TextCellValue(linha['prazoEntrega'] ?? ''),
+        excel.TextCellValue(linha['descricao'] ?? ''),
+        excel.TextCellValue(linha['anotacoes'] ?? ''),
+      ]);
+    }
+
+    final caminho = await _selecionarCaminhoSalvarArquivo(
+      nomeArquivo:
+      'status_chamados_${DateTime.now().millisecondsSinceEpoch}.xlsx',
+      extensao: 'xlsx',
+    );
+
+    if (caminho == null || caminho.trim().isEmpty) {
+      return null;
+    }
+
+    final bytes = workbook.encode();
+    if (bytes == null) {
+      throw Exception('Não foi possível gerar o arquivo Excel.');
+    }
+
+    final arquivo = File(caminho)
+      ..createSync(recursive: true)
+      ..writeAsBytesSync(bytes);
+
+    return arquivo;
+  }
+
+  Future<File?> _gerarChamadosPdf() async {
+    final dados = _montarDadosRelatorioChamados();
+    final logoBytes = await rootBundle.load('assets/imagens/EnterDoc.png');
+    final logo = pw.MemoryImage(logoBytes.buffer.asUint8List());
+
+    final pdf = pw.Document();
+
+    pdf.addPage(
+      pw.MultiPage(
+        pageFormat: PdfPageFormat.a4.landscape,
+        margin: const pw.EdgeInsets.all(24),
+        build: (context) {
+          return [
+            pw.Container(
+              width: double.infinity,
+              padding: const pw.EdgeInsets.symmetric(vertical: 10),
+              child: pw.Column(
+                crossAxisAlignment: pw.CrossAxisAlignment.center,
+                children: [
+                  pw.Image(logo, height: 42),
+                  pw.SizedBox(height: 10),
+                  pw.Text(
+                    'Status Chamados',
+                    style: pw.TextStyle(
+                      fontSize: 20,
+                      fontWeight: pw.FontWeight.bold,
+                      color: PdfColors.blueGrey900,
+                    ),
+                  ),
+                  pw.SizedBox(height: 6),
+                  pw.Text(
+                    'Relatório gerado em ${DateTime.now().day.toString().padLeft(2, '0')}/${DateTime.now().month.toString().padLeft(2, '0')}/${DateTime.now().year}',
+                    style: const pw.TextStyle(
+                      fontSize: 10,
+                      color: PdfColors.grey700,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            pw.SizedBox(height: 18),
+            pw.TableHelper.fromTextArray(
+              headers: const [
+                'Cliente',
+                'Número do chamado',
+                'Número da RO',
+                'Assunto',
+                'Meu Status',
+                'Status Atual',
+                'Abertura',
+                'Prazo de Entrega',
+                'Descrição',
+                'Minhas Anotações',
+              ],
+              data: dados
+                  .map(
+                    (linha) => [
+                  linha['cliente'] ?? '',
+                  linha['numeroChamado'] ?? '',
+                  linha['numeroRo'] ?? '',
+                  linha['assunto'] ?? '',
+                  linha['meuStatus'] ?? '',
+                  linha['statusAtual'] ?? '',
+                  linha['abertura'] ?? '',
+                  linha['prazoEntrega'] ?? '',
+                  linha['descricao'] ?? '',
+                  linha['anotacoes'] ?? '',
+                ],
+              )
+                  .toList(),
+              border: pw.TableBorder.all(
+                color: PdfColors.grey300,
+                width: 0.6,
+              ),
+              headerStyle: pw.TextStyle(
+                fontSize: 9,
+                fontWeight: pw.FontWeight.bold,
+                color: PdfColors.white,
+              ),
+              headerDecoration: const pw.BoxDecoration(
+                color: PdfColor.fromInt(0xFF0F766E),
+              ),
+              cellStyle: const pw.TextStyle(
+                fontSize: 8,
+                color: PdfColors.black,
+              ),
+              cellAlignment: pw.Alignment.centerLeft,
+              headerAlignment: pw.Alignment.centerLeft,
+              columnWidths: {
+                0: const pw.FlexColumnWidth(1.4),
+                1: const pw.FlexColumnWidth(1.1),
+                2: const pw.FlexColumnWidth(1.0),
+                3: const pw.FlexColumnWidth(1.4),
+                4: const pw.FlexColumnWidth(1.0),
+                5: const pw.FlexColumnWidth(1.0),
+                6: const pw.FlexColumnWidth(0.9),
+                7: const pw.FlexColumnWidth(1.0),
+                8: const pw.FlexColumnWidth(1.6),
+                9: const pw.FlexColumnWidth(1.6),
+              },
+            ),
+          ];
+        },
+      ),
+    );
+
+    final caminho = await _selecionarCaminhoSalvarArquivo(
+      nomeArquivo:
+      'status_chamados_${DateTime.now().millisecondsSinceEpoch}.pdf',
+      extensao: 'pdf',
+    );
+
+    if (caminho == null || caminho.trim().isEmpty) {
+      return null;
+    }
+
+    final arquivo = File(caminho);
+    await arquivo.writeAsBytes(await pdf.save());
+
+    return arquivo;
+  }
+
   Future<void> selecionarPeriodoAbertura() async {
     final intervalo = await showDateRangePicker(
       context: context,
@@ -1326,9 +1772,9 @@ class _ChamadosPageState extends State<ChamadosPage> {
 
                               _buildTextField(
                                 controller: anotacoesController,
-                                label: 'Minhas anotações',
-                                hint: 'Use este espaço para registrar análises, decisões e próximos passos',
-                                maxLines: 5,
+                                label: 'Primeira atualização do chamado',
+                                hint: 'Digite uma atualização curta para iniciar o histórico do chamado',
+                                maxLines: 3,
                                 required: false,
                               ),
                               const SizedBox(height: 20),
@@ -1446,6 +1892,7 @@ class _ChamadosPageState extends State<ChamadosPage> {
     prazoController.clear();
     roController.clear();
     anotacoesController.clear();
+    dataAtualizacaoController.clear();
     statusController.clear();
 
     setState(() {
@@ -1471,6 +1918,70 @@ class _ChamadosPageState extends State<ChamadosPage> {
     });
 
     aplicarFiltros();
+  }
+
+  Future<void> _acaoExportarExcel() async {
+    try {
+      final arquivo = await _exportarChamadosExcel();
+
+      if (arquivo == null) {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Exportação do Excel cancelada.'),
+          ),
+        );
+        return;
+      }
+
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Excel salvo com sucesso em:\n${arquivo.path}'),
+          backgroundColor: const Color(0xFF059669),
+        ),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Erro ao exportar Excel: $e'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
+  }
+
+  Future<void> _acaoExportarPdf() async {
+    try {
+      final arquivo = await _gerarChamadosPdf();
+
+      if (arquivo == null) {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Exportação do PDF cancelada.'),
+          ),
+        );
+        return;
+      }
+
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('PDF salvo com sucesso em:\n${arquivo.path}'),
+          backgroundColor: const Color(0xFF0F766E),
+        ),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Erro ao exportar PDF: $e'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
   }
 
   String textoPeriodoAbertura() {
@@ -1797,81 +2308,8 @@ class _ChamadosPageState extends State<ChamadosPage> {
           ),
           const SizedBox(height: 12),
           Row(
+            mainAxisSize: MainAxisSize.min,
             children: [
-              Expanded(
-                child: DropdownButtonFormField<String>(
-                  value: filtroTipoSolicitacao,
-                  isExpanded: true,
-                  decoration: buildFiltroDecoration(
-                    label: 'Filtrar por tipo',
-                  ),
-                  items: const [
-                    DropdownMenuItem(value: 'Todos', child: Text('Todos')),
-                    DropdownMenuItem(value: 'Correção', child: Text('Correção')),
-                    DropdownMenuItem(value: 'Melhoria', child: Text('Melhoria')),
-                    DropdownMenuItem(value: 'Novo Programa', child: Text('Novo Programa')),
-                    DropdownMenuItem(value: 'Ajuste Operacional', child: Text('Ajuste Operacional')),
-                  ],
-                  onChanged: (value) {
-                    setState(() {
-                      filtroTipoSolicitacao = value ?? 'Todos';
-                    });
-                    aplicarFiltros();
-                  },
-                ),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: DropdownButtonFormField<String>(
-                  value: filtroStatus,
-                  isExpanded: true,
-                  decoration: buildFiltroDecoration(
-                    label: 'Filtrar por status',
-                  ),
-                  items: const [
-                    DropdownMenuItem(value: 'Todos', child: Text('Todos')),
-                    DropdownMenuItem(value: 'Em análise', child: Text('Em análise')),
-                    DropdownMenuItem(value: 'Desenvolvimento', child: Text('Desenvolvimento')),
-                    DropdownMenuItem(value: 'Teste base M&O', child: Text('Teste base M&O')),
-                    DropdownMenuItem(value: 'Atualização sistema', child: Text('Atualização sistema')),
-                    DropdownMenuItem(value: 'Atualização Sprint', child: Text('Atualização Sprint')),
-                    DropdownMenuItem(value: 'Atualização Base Cliente', child: Text('Atualização Base Cliente')),
-                    DropdownMenuItem(value: 'Testes Cliente', child: Text('Testes Cliente')),
-                    DropdownMenuItem(value: 'Fechado', child: Text('Fechado')),
-                  ],
-                  onChanged: (value) {
-                    setState(() {
-                      filtroStatus = value ?? 'Todos';
-                    });
-                    aplicarFiltros();
-                  },
-                ),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: OutlinedButton.icon(
-                  onPressed: selecionarPeriodoAbertura,
-                  icon: const Icon(Icons.date_range, size: 18),
-                  label: Align(
-                    alignment: Alignment.centerLeft,
-                    child: Text(
-                      textoPeriodoAbertura(),
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ),
-                  style: OutlinedButton.styleFrom(
-                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 18),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(14),
-                    ),
-                    side: const BorderSide(color: Color(0xFFD1D5DB)),
-                    foregroundColor: const Color(0xFF374151),
-                    backgroundColor: const Color(0xFFF9FAFB),
-                    alignment: Alignment.centerLeft,
-                  ),
-                ),
-              ),
-              const SizedBox(width: 12),
               OutlinedButton.icon(
                 onPressed: limparFiltros,
                 icon: const Icon(Icons.refresh, size: 18),
@@ -1881,6 +2319,36 @@ class _ChamadosPageState extends State<ChamadosPage> {
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(14),
                   ),
+                ),
+              ),
+              const SizedBox(width: 12),
+              OutlinedButton.icon(
+                onPressed: _acaoExportarExcel,
+                icon: const Icon(Icons.table_view_outlined, size: 18),
+                label: const Text('Excel'),
+                style: OutlinedButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 18),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(14),
+                  ),
+                  foregroundColor: const Color(0xFF166534),
+                  side: const BorderSide(color: Color(0xFF86EFAC)),
+                  backgroundColor: const Color(0xFFF0FDF4),
+                ),
+              ),
+              const SizedBox(width: 12),
+              ElevatedButton.icon(
+                onPressed: _acaoExportarPdf,
+                icon: const Icon(Icons.picture_as_pdf_outlined, size: 18),
+                label: const Text('PDF'),
+                style: ElevatedButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 18),
+                  backgroundColor: const Color(0xFF0F766E),
+                  foregroundColor: Colors.white,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(14),
+                  ),
+                  elevation: 0,
                 ),
               ),
             ],
@@ -1991,12 +2459,16 @@ class _ChamadosPageState extends State<ChamadosPage> {
     bool required = true,
     bool readOnly = false,
     ValueChanged<String>? onChanged,
+    List<TextInputFormatter>? inputFormatters,
+    TextInputType? keyboardType,
   }) {
     return TextFormField(
       controller: controller,
       maxLines: maxLines,
       readOnly: readOnly,
       onChanged: onChanged,
+      inputFormatters: inputFormatters,
+      keyboardType: keyboardType,
       validator: required
           ? (value) {
         if (value == null || value.trim().isEmpty) {
@@ -2008,8 +2480,22 @@ class _ChamadosPageState extends State<ChamadosPage> {
       decoration: InputDecoration(
         labelText: label,
         hintText: hint,
+        floatingLabelBehavior: FloatingLabelBehavior.always,
+        floatingLabelStyle: const TextStyle(
+          fontSize: 14,
+          fontWeight: FontWeight.w500,
+          color: Color(0xFF6B7280),
+        ),
+        alignLabelWithHint: maxLines > 1,
         filled: true,
         fillColor: const Color(0xFFF9FAFB),
+        isDense: true,
+        contentPadding: EdgeInsets.fromLTRB(
+          14,
+          maxLines > 1 ? 18 : 20,
+          14,
+          14,
+        ),
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(14),
           borderSide: const BorderSide(color: Color(0xFFD1D5DB)),
@@ -2020,7 +2506,10 @@ class _ChamadosPageState extends State<ChamadosPage> {
         ),
         focusedBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(14),
-          borderSide: const BorderSide(color: Color(0xFF0F766E), width: 1.4),
+          borderSide: const BorderSide(
+            color: Color(0xFF0F766E),
+            width: 1.4,
+          ),
         ),
       ),
     );

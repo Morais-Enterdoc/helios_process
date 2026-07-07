@@ -77,7 +77,7 @@ class Chamado {
       ultimaAtualizacao: ultimaAtualizacao ?? this.ultimaAtualizacao,
       agenteAtual: agenteAtual ?? this.agenteAtual,
       equipeAtual: equipeAtual ?? this.equipeAtual,
-      anotacoes: anotacoes ?? this.anotacoes,
+      anotacoes: anotacoes != null ? anotacoes : this.anotacoes,
       meuStatus: meuStatus ?? this.meuStatus,
       anexos: anexos ?? this.anexos,
     );

@@ -18,6 +18,7 @@ import '../../cronograma/data/cronograma_repository.dart';
 import '../../tarefas/domain/tarefa_detalhe.dart';
 import '../../agenda/domain/agenda_manual.dart';
 import '../../timeline/presentation/timeline_page.dart';
+import '../../prototipador_ia/presentation/prototipador_ia_page.dart';
 
 bool menuRecolhido = false;
 
@@ -1038,8 +1039,11 @@ class _HomePageState extends State<HomePage> {
       case 'sipoc':
         return const SipocPage();
 
+      case 'prototipador_ia':
+        return const PrototipadorIaPage();
       case 'dashboard':
       default:
+
         if (carregandoDashboardReal) {
           return const Center(
             child: CircularProgressIndicator(),

@@ -31,10 +31,12 @@ class _TimelinePageState extends State<TimelinePage> {
   final AgendaManualRepository agendaManualRepository = AgendaManualRepository();
 
   List<_TimelineEventoVinculado> eventosAgenda = [];
+  List<_TimelineEventoVinculado> eventosTarefas = [];
   TimelineDetalhe? itemSelecionado;
-  List<TimelineItem> itens = [];
+  List itens = [];
   bool carregando = true;
   TimelineVisao visaoAtual = TimelineVisao.semana;
+  DateTime dataReferencia = DateTime.now();
 
   @override
   void initState() {
@@ -50,12 +52,6 @@ class _TimelinePageState extends State<TimelinePage> {
     try {
       final lista = await timelineRepository.listarItens();
 
-      print('=== ITENS RECEBIDOS NA TIMELINE PAGE ===');
-      for (final item in lista) {
-        print('id=${item.id} tipoOrigem=${item.tipoOrigem} origemId=${item.origemId} inicio=${item.inicio} fim=${item.fim}');
-      }
-      print('========================================');
-
       final dataInicial = _formatarDataBanco(_inicioPeriodoVisivel);
       final dataFinal = _formatarDataBanco(_fimPeriodoVisivel);
 
@@ -68,12 +64,43 @@ class _TimelinePageState extends State<TimelinePage> {
 
       final itensFiltrados = lista.where((item) {
         final statusNormalizado = item.status.trim().toLowerCase();
-        final chamadoFechado = item.tipoOrigem == 'chamado' &&
+        final tipoOrigemNormalizado = item.tipoOrigem.trim().toLowerCase();
+        final idTexto = item.id.toString().toLowerCase();
+
+        final chamadoFechado = tipoOrigemNormalizado == 'chamado' &&
             (statusNormalizado == 'fechada' || statusNormalizado == 'fechado');
 
         if (chamadoFechado) return false;
 
-        return _itemEstaNoPeriodoVisivel(item.inicio, item.fim);
+        final ehLinhaDeTarefa = idTexto.startsWith('tarefa_');
+        if (ehLinhaDeTarefa) {
+          return false;
+        }
+
+        final ehLinhaDeProjeto = tipoOrigemNormalizado == 'cronograma' &&
+            item.id.toString().toLowerCase().startsWith('cronograma_');
+
+        final estaNoPeriodo = _itemEstaNoPeriodoVisivel(item.inicio, item.fim);
+
+        if (ehLinhaDeProjeto) {
+          final temTarefaVinculada = lista.any((outro) {
+            final outroId = outro.id.toString().toLowerCase();
+            return outroId.startsWith('tarefa_') &&
+                outro.tipoOrigem.trim().toLowerCase() == 'cronograma' &&
+                outro.origemId == item.origemId;
+          });
+
+          print(
+            'LINHA_PROJETO -> '
+                'id=${item.id} | origemId=${item.origemId} | titulo=${item.titulo} | '
+                'ehLinhaDeProjeto=$ehLinhaDeProjeto | temTarefaVinculada=$temTarefaVinculada | '
+                'estaNoPeriodo=$estaNoPeriodo',
+          );
+
+          return estaNoPeriodo;
+        }
+
+        return estaNoPeriodo;
       }).toList();
 
       final eventos = agendas
@@ -81,11 +108,19 @@ class _TimelinePageState extends State<TimelinePage> {
           .whereType<_TimelineEventoVinculado>()
           .toList();
 
-      print('=== EVENTOS DE AGENDA CARREGADOS ===');
-      for (final e in eventos) {
-        print('evento="${e.evento.titulo}" tipoVinculo=${e.tipoVinculo} vinculoId=${e.vinculoId}');
+      final eventosDasTarefas = lista
+          .where((item) => item.id.toString().startsWith('tarefa_'))
+          .map(_mapTarefaParaEvento)
+          .whereType<_TimelineEventoVinculado>()
+          .toList();
+
+      print('=== EVENTOS DE TAREFAS CARREGADOS ===');
+      for (final e in eventosDasTarefas) {
+        print(
+          'evento="${e.evento.titulo}" tipoVinculo=${e.tipoVinculo} vinculoId=${e.vinculoId} dia=${e.evento.dia}',
+        );
       }
-      print('====================================');
+      print('=====================================');
 
       print('Itens filtrados pelo período: ${itensFiltrados.length}');
       for (final item in itensFiltrados) {
@@ -95,6 +130,7 @@ class _TimelinePageState extends State<TimelinePage> {
       setState(() {
         itens = itensFiltrados;
         eventosAgenda = eventos;
+        eventosTarefas = eventosDasTarefas;
         carregando = false;
       });
     } catch (e) {
@@ -130,15 +166,15 @@ class _TimelinePageState extends State<TimelinePage> {
   }
 
   DateTime get _inicioPeriodoVisivel {
-    final hoje = _normalizarData(DateTime.now());
+    final base = _normalizarData(dataReferencia);
 
     switch (visaoAtual) {
       case TimelineVisao.hoje:
-        return hoje;
+        return base;
       case TimelineVisao.semana:
-        return hoje.subtract(Duration(days: hoje.weekday - 1));
+        return base.subtract(Duration(days: base.weekday - 1));
       case TimelineVisao.mes:
-        return DateTime(hoje.year, hoje.month, 1);
+        return DateTime(base.year, base.month, 1);
     }
   }
 
@@ -154,52 +190,73 @@ class _TimelinePageState extends State<TimelinePage> {
     }
   }
 
+  void _moverPeriodo(int direcao) {
+    setState(() {
+      switch (visaoAtual) {
+        case TimelineVisao.hoje:
+          dataReferencia = dataReferencia.add(Duration(days: direcao));
+          break;
+        case TimelineVisao.semana:
+          dataReferencia = dataReferencia.add(Duration(days: 7 * direcao));
+          break;
+        case TimelineVisao.mes:
+          dataReferencia = DateTime(
+            dataReferencia.year,
+            dataReferencia.month + direcao,
+            dataReferencia.day,
+          );
+          break;
+      }
+    });
+
+    carregarTimeline();
+  }
+
+  void _irParaHoje() {
+    setState(() {
+      dataReferencia = DateTime.now();
+    });
+
+    carregarTimeline();
+  }
+
   List<TimelineEvento> _eventosDaLinha(TimelineItem item) {
     final tipoItem = item.tipoOrigem.trim().toLowerCase();
     final origemId = item.origemId;
 
-    return eventosAgenda.where((vinculado) {
+    print('item.id=${item.id}');
+    print('item.tipoOrigem=$tipoItem');
+    print('item.origemId=$origemId');
+
+    final todosEventos = [...eventosAgenda, ...eventosTarefas];
+
+    return todosEventos.where((vinculado) {
       final tipoVinculo = vinculado.tipoVinculo.trim().toLowerCase();
+
 
       if (tipoVinculo == 'geral') return false;
       if (vinculado.vinculoId == null || origemId == null) return false;
 
       switch (tipoVinculo) {
         case 'projeto':
-          return tipoItem == 'cronograma' && vinculado.vinculoId == origemId;
-
-        case 'chamado':
-          return tipoItem == 'chamado' && vinculado.vinculoId == origemId;
-
-        default:
-          return false;
-      }
-    }).map((e) => e.evento).toList();
-  }
-
-  List<TimelineEvento> eventosDaLinha(TimelineItem item) {
-    final tipoItem = item.tipoOrigem.trim().toLowerCase();
-    final origemId = item.origemId;
-
-    print('--- Checando eventos da linha: id=${item.id} tipoOrigem=$tipoItem origemId=$origemId');
-
-    return eventosAgenda.where((vinculado) {
-      final tipoVinculo = vinculado.tipoVinculo.trim().toLowerCase();
-
-      print('  vinculo tipo=$tipoVinculo vinculoId=${vinculado.vinculoId}');
-
-      if (tipoVinculo == 'geral') return false;
-      if (vinculado.vinculoId == null || origemId == null) return false;
-
-      switch (tipoVinculo) {
-        case 'projeto':
-          final okProj = tipoItem == 'cronograma' && vinculado.vinculoId == origemId;
-          print('    -> projeto? $okProj');
+        case 'cronograma':
+          final okProj =
+              tipoItem == 'cronograma' && vinculado.vinculoId == origemId;
+          print(
+            '    -> projeto/cronograma? $okProj '
+                '(tipoItem=$tipoItem, vinculoId=${vinculado.vinculoId}, origemId=$origemId, tituloLinha=${item.titulo})',
+          );
           return okProj;
 
         case 'chamado':
-          final okCham = tipoItem == 'chamado' && vinculado.vinculoId == origemId;
-          print('    -> chamado? $okCham');
+          final okCham =
+              tipoItem == 'chamado' && vinculado.vinculoId == origemId;
+
+          print(
+            ' -> chamado? $okCham '
+                '(tipoItem=$tipoItem, vinculoId=${vinculado.vinculoId}, origemId=$origemId, tituloLinha=${item.titulo})',
+          );
+
           return okCham;
 
         default:
@@ -238,6 +295,29 @@ class _TimelinePageState extends State<TimelinePage> {
           agenda.titulo,
           _calcularInicioNoPeriodo(data),
           _parseCorHex(agenda.cor),
+        ),
+      );
+    } catch (_) {
+      return null;
+    }
+  }_TimelineEventoVinculado? _mapTarefaParaEvento(TimelineItem item) {
+    try {
+      final tipoOrigem = item.tipoOrigem.trim().toLowerCase();
+      final origemId = item.origemId;
+
+      if (origemId == null) return null;
+      if (tipoOrigem != 'cronograma' && tipoOrigem != 'chamado') return null;
+      if (!_itemEstaNoPeriodoVisivel(item.inicio, item.fim)) return null;
+
+      final tipoVinculo = tipoOrigem == 'cronograma' ? 'projeto' : 'chamado';
+
+      return _TimelineEventoVinculado(
+          tipoVinculo: tipoVinculo,
+          vinculoId: origemId,
+          evento: TimelineEvento(
+          item.titulo,
+          _calcularInicioNoPeriodo(item.inicio),
+          const Color(0xFFFDE68A),
         ),
       );
     } catch (_) {
@@ -408,6 +488,7 @@ class _TimelinePageState extends State<TimelinePage> {
                                       separatorBuilder: (_, __) => const SizedBox(height: 12),
                                       itemBuilder: (context, index) {
                                         final item = itens[index];
+
                                         return TimelineLinhaCard(
                                           titulo: item.titulo,
                                           subtitulo: '${item.cliente} • ${item.projeto} • ${_statusVisual(item)}',
@@ -630,12 +711,36 @@ class _TimelinePageState extends State<TimelinePage> {
         Wrap(
           spacing: 10,
           runSpacing: 10,
+          crossAxisAlignment: WrapCrossAlignment.center,
           children: [
+            _buildSetaNavegacao(
+              icone: Icons.chevron_left,
+              onTap: () => _moverPeriodo(-1),
+            ),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+              decoration: BoxDecoration(
+                color: const Color(0xFFF8FAFC),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: const Color(0xFFD1D5DB)),
+              ),
+              child: Text(
+                _tituloPeriodoAtual(),
+                style: const TextStyle(
+                  color: Color(0xFF374151),
+                  fontWeight: FontWeight.w700,
+                  fontSize: 13,
+                ),
+              ),
+            ),
             TimelineFiltroChip(
               label: 'Hoje',
               ativo: visaoAtual == TimelineVisao.hoje,
               onTap: () {
-                setState(() => visaoAtual = TimelineVisao.hoje);
+                setState(() {
+                  visaoAtual = TimelineVisao.hoje;
+                  dataReferencia = DateTime.now();
+                });
                 carregarTimeline();
               },
             ),
@@ -643,7 +748,9 @@ class _TimelinePageState extends State<TimelinePage> {
               label: 'Semana',
               ativo: visaoAtual == TimelineVisao.semana,
               onTap: () {
-                setState(() => visaoAtual = TimelineVisao.semana);
+                setState(() {
+                  visaoAtual = TimelineVisao.semana;
+                });
                 carregarTimeline();
               },
             ),
@@ -651,14 +758,79 @@ class _TimelinePageState extends State<TimelinePage> {
               label: 'Mês',
               ativo: visaoAtual == TimelineVisao.mes,
               onTap: () {
-                setState(() => visaoAtual = TimelineVisao.mes);
+                setState(() {
+                  visaoAtual = TimelineVisao.mes;
+                });
                 carregarTimeline();
               },
+            ),
+            _buildSetaNavegacao(
+              icone: Icons.chevron_right,
+              onTap: () => _moverPeriodo(1),
             ),
           ],
         ),
       ],
     );
+  }
+
+  Widget _buildSetaNavegacao({
+    required IconData icone,
+    required VoidCallback onTap,
+  }) {
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(12),
+        child: Container(
+          width: 42,
+          height: 42,
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: const Color(0xFFD1D5DB)),
+          ),
+          child: Icon(
+            icone,
+            size: 20,
+            color: const Color(0xFF374151),
+          ),
+        ),
+      ),
+    );
+  }
+
+  String _tituloPeriodoAtual() {
+    const meses = [
+      'Janeiro',
+      'Fevereiro',
+      'Março',
+      'Abril',
+      'Maio',
+      'Junho',
+      'Julho',
+      'Agosto',
+      'Setembro',
+      'Outubro',
+      'Novembro',
+      'Dezembro',
+    ];
+
+    switch (visaoAtual) {
+      case TimelineVisao.hoje:
+        final data = _inicioPeriodoVisivel;
+        return '${data.day.toString().padLeft(2, '0')}/${data.month.toString().padLeft(2, '0')}/${data.year}';
+
+      case TimelineVisao.semana:
+        final inicio = _inicioPeriodoVisivel;
+        final fim = _fimPeriodoVisivel;
+        return '${inicio.day.toString().padLeft(2, '0')}/${inicio.month.toString().padLeft(2, '0')} até ${fim.day.toString().padLeft(2, '0')}/${fim.month.toString().padLeft(2, '0')}/${fim.year}';
+
+      case TimelineVisao.mes:
+        final inicio = _inicioPeriodoVisivel;
+        return '${meses[inicio.month - 1]} de ${inicio.year}';
+    }
   }
 
   Widget _buildLegenda() {
@@ -827,17 +999,17 @@ class TimelineLinhaCard extends StatelessWidget {
         color: Colors.transparent,
         child: InkWell(
         borderRadius: BorderRadius.circular(18),
-    onTap: onTap,
-    child: Container(
-    height: 156,
-    decoration: BoxDecoration(
-    color: const Color(0xFFFCFDFE),
-    borderRadius: BorderRadius.circular(18),
-    border: Border.all(color: const Color(0xFFE5E7EB)),
-    ),
-      child: Row(
-        children: [
-          Container(
+          onTap: onTap,
+          child: Container(
+            height: 118,
+            decoration: BoxDecoration(
+              color: const Color(0xFFFCFDFE),
+              borderRadius: BorderRadius.circular(18),
+              border: Border.all(color: const Color(0xFFE5E7EB)),
+            ),
+            child: Row(
+              children: [
+                Container(
             width: larguraColunaEsquerda,
             padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
             child: Column(
@@ -883,8 +1055,17 @@ class TimelineLinhaCard extends StatelessWidget {
             child: LayoutBuilder(
               builder: (context, constraints) {
                 final larguraDia = constraints.maxWidth / totalColunas;
-                final leftBarra = (inicio - 1) * larguraDia;
-                final widthBarra = duracao * larguraDia;
+
+                final inicioAjustado = inicio < 1 ? 1 : inicio;
+
+                // Garante que a barra nunca ultrapasse o total de colunas visíveis.
+                final espacoDisponivel = totalColunas - inicioAjustado + 1;
+                final duracaoAjustada = duracao < 1
+                    ? 1
+                    : (duracao > espacoDisponivel ? espacoDisponivel : duracao);
+
+                final leftBarra = (inicioAjustado - 1) * larguraDia;
+                final widthBarra = duracaoAjustada * larguraDia;
 
                 return Stack(
                   children: [
@@ -910,43 +1091,30 @@ class TimelineLinhaCard extends StatelessWidget {
                       ),
                     ),
                     Positioned(
-                      left: leftBarra + 6,
-                      top: 24,
+                      left: leftBarra + 4,
+                      top: 14,
                       child: Container(
-                      width: (widthBarra - 12).clamp(56.0, double.infinity),
-                        height: 36,
-                        padding: const EdgeInsets.symmetric(horizontal: 12),
+                        width: (widthBarra - 8).clamp(56.0, double.infinity),
+                        height: 74,
+                        padding: const EdgeInsets.fromLTRB(10, 8, 10, 8),
                         decoration: BoxDecoration(
-                          color: corBarra,
-                          borderRadius: BorderRadius.circular(12),
-                          boxShadow: [
-                            BoxShadow(
-                              color: corBarra.withOpacity(0.22),
-                              blurRadius: 10,
-                              offset: const Offset(0, 4),
-                            ),
-                          ],
+                          color: corBarra.withOpacity(0.18),
+                          borderRadius: BorderRadius.circular(10),
+                          border: Border.all(
+                            color: corBarra.withOpacity(0.35),
+                            width: 1,
+                          ),
                         ),
-                        child: Row(
-                          children: [
-                            const Icon(
-                              Icons.timeline,
-                              size: 16,
-                              color: Colors.white,
-                            ),
-                            const SizedBox(width: 8),
-                            Expanded(
-                              child: Text(
-                                '$percentual% concluído',
-                                style: const TextStyle(
-                                  color: Colors.white,
-                                  fontWeight: FontWeight.w700,
-                                  fontSize: 12,
-                                ),
-                                overflow: TextOverflow.ellipsis,
-                              ),
-                            ),
-                          ],
+                        alignment: Alignment.topLeft,
+                        child: Text(
+                          '$percentual% concluído',
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            color: corBarra,
+                            fontWeight: FontWeight.w700,
+                            fontSize: 11,
+                          ),
                         ),
                       ),
                     ),
@@ -960,24 +1128,26 @@ class TimelineLinhaCard extends StatelessWidget {
                           .where((item) => item.dia == evento.dia)
                           .length;
 
-                      final topEvento = 66 + (eventosMesmoDiaAntes * 28);
+                      // Agora os eventos ficam DENTRO da área da barra principal.
+                      final topEvento = 58 + (eventosMesmoDiaAntes * 22);
 
                       return Positioned(
-                        left: leftEvento + 10,
+                        left: leftEvento + 8,
                         top: topEvento.toDouble(),
                         child: Container(
                           constraints: BoxConstraints(
-                            maxWidth: larguraDia > 120 ? larguraDia - 16 : larguraDia * 1.8,
+                            maxWidth: larguraDia > 120 ? larguraDia - 16 : larguraDia * 1.35,
                           ),
                           padding: const EdgeInsets.symmetric(
-                            horizontal: 10,
-                            vertical: 6,
+                            horizontal: 8,
+                            vertical: 3,
                           ),
                           decoration: BoxDecoration(
-                            color: evento.cor.withOpacity(0.95),
-                            borderRadius: BorderRadius.circular(999),
+                            color: evento.cor,
+                            borderRadius: BorderRadius.circular(6),
                             border: Border.all(
-                              color: evento.cor.withOpacity(0.90),
+                              color: const Color(0xFF9CA3AF),
+                              width: 0.8,
                             ),
                           ),
                           child: Text(
@@ -987,7 +1157,7 @@ class TimelineLinhaCard extends StatelessWidget {
                             style: const TextStyle(
                               fontSize: 11,
                               fontWeight: FontWeight.w600,
-                              color: Color(0xFF1F2937),
+                              color: Color(0xFF111827),
                             ),
                           ),
                         ),

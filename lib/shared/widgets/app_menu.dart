@@ -109,6 +109,13 @@ class AppMenu extends StatelessWidget {
                     onTap: () {},
                   ),
                   _MenuItem(
+                    icon: Icons.auto_awesome_outlined,
+                    label: 'Prototipador IA',
+                    selected: selectedItem == 'prototipador_ia',
+                    isCollapsed: isCollapsed,
+                    onTap: () => onItemSelected('prototipador_ia'),
+                  ),
+                  _MenuItem(
                     icon: Icons.business_outlined,
                     label: 'Clientes',
                     selected: selectedItem == 'clientes',
