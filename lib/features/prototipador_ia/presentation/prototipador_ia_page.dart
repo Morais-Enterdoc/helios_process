@@ -1,6 +1,10 @@
 import 'package:flutter/material.dart';
+
+import '../data/openai_prototipador_service.dart';
+import '../data/prototipador_prompt_builder.dart';
 import '../data/prototipo_ia_repository.dart';
 import '../domain/prototipo_ia.dart';
+import 'package:file_picker/file_picker.dart';
 
 class PrototipadorIaPage extends StatefulWidget {
   const PrototipadorIaPage({super.key});
@@ -15,52 +19,104 @@ class _PrototipadorIaPageState extends State<PrototipadorIaPage>
 
   final List<String> _prioridades = ['Baixa', 'Média', 'Alta', 'Crítica'];
 
+  final TextEditingController _clienteController = TextEditingController();
+  final TextEditingController _projetoMacroprocessoController = TextEditingController();
   final TextEditingController _numeroChamadoController = TextEditingController();
   final TextEditingController _tituloChamadoController = TextEditingController();
   final TextEditingController _vinculoChamadoController = TextEditingController();
+  final TextEditingController _moduloMoController = TextEditingController();
+  final TextEditingController _programaMoController = TextEditingController();
+  final TextEditingController _nomeTelaController = TextEditingController();
+  final TextEditingController _objetivoTelaController = TextEditingController();
+  final TextEditingController _usuariosPrincipaisController = TextEditingController();
+
+  final TextEditingController _descricaoDetalhadaController = TextEditingController();
+  final TextEditingController _problemaAtualController = TextEditingController();
+  final TextEditingController _resultadoEsperadoController = TextEditingController();
+  final TextEditingController _camposNecessariosController = TextEditingController();
+  final TextEditingController _filtrosNecessariosController = TextEditingController();
+  final TextEditingController _botoesNecessariosController = TextEditingController();
+  final TextEditingController _colunasGridController = TextEditingController();
+  final TextEditingController _regrasNegocioController = TextEditingController();
+  final TextEditingController _integracoesEnvolvidasController = TextEditingController();
+
   final PrototipoIaRepository _repository = PrototipoIaRepository();
+  final PrototipadorPromptBuilder _promptBuilder = PrototipadorPromptBuilder();
+  final OpenAiPrototipadorService _openAiService = OpenAiPrototipadorService();
 
   String _prioridadeSelecionada = 'Alta';
   PrototipoIa? _ultimoPrototipoSalvo;
+  PrototipoIa? _prototipoEmEdicao;
+  String _arquivoAnexadoPath = '';
 
-  void _salvarPrototipoSimulado() {
+  List<PrototipoIa> _historicoPrototipos = [];
+
+  Future<void> _carregarHistorico() async {
+    final historico = await _repository.listarTodos();
+
+    if (!mounted) return;
+
+    setState(() {
+      _historicoPrototipos = historico;
+    });
+  }
+
+  Future<void> _salvarPrototipoSimulado() async {
+    final agora = DateTime.now();
+
+    if (_clienteController.text.trim().isEmpty ||
+        _nomeTelaController.text.trim().isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Preencha pelo menos Cliente e Nome da tela para salvar.'),
+          backgroundColor: Colors.red,
+        ),
+      );
+      return;
+    }
+
     final prototipo = PrototipoIa(
-      id: DateTime.now().millisecondsSinceEpoch.toString(),
-      cliente: _numeroChamadoController.text.trim().isEmpty
-          ? 'Cliente não informado'
-          : 'Cliente vinculado ao chamado ${_numeroChamadoController.text.trim()}',
-      projetoMacroprocesso: '',
+      id: _prototipoEmEdicao?.id ?? agora.millisecondsSinceEpoch.toString(),
+      cliente: _clienteController.text.trim(),
+      projetoMacroprocesso: _projetoMacroprocessoController.text.trim(),
       numeroChamadoMo: _numeroChamadoController.text.trim(),
       tituloChamado: _tituloChamadoController.text.trim(),
       vinculacaoChamado: _vinculoChamadoController.text.trim(),
-      moduloMo: '',
-      programaMoRelacionado: '',
-      nomeTelaFuncionalidade: 'Prototipador IA',
-      objetivoTela: 'Estruturar necessidade e gerar documentação de protótipo.',
-      usuariosPrincipais: '',
+      moduloMo: _moduloMoController.text.trim(),
+      programaMoRelacionado: _programaMoController.text.trim(),
+      nomeTelaFuncionalidade: _nomeTelaController.text.trim(),
+      objetivoTela: _objetivoTelaController.text.trim(),
+      usuariosPrincipais: _usuariosPrincipaisController.text.trim(),
       prioridade: _prioridadeSelecionada,
-      descricaoDetalhada: '',
-      problemaAtual: '',
-      resultadoEsperado: '',
-      camposNecessarios: '',
-      filtrosNecessarios: '',
-      botoesNecessarios: '',
-      colunasGrid: '',
-      regrasNegocio: '',
-      integracoesEnvolvidas: '',
-      imagemTelaAtualPath: '',
-      documentacaoGerada: '',
-      htmlGerado: '',
-      arquivoHtmlLocal: '',
-      createdAt: DateTime.now(),
-      updatedAt: DateTime.now(),
+      descricaoDetalhada: _descricaoDetalhadaController.text.trim(),
+      problemaAtual: _problemaAtualController.text.trim(),
+      resultadoEsperado: _resultadoEsperadoController.text.trim(),
+      camposNecessarios: _camposNecessariosController.text.trim(),
+      filtrosNecessarios: _filtrosNecessariosController.text.trim(),
+      botoesNecessarios: _botoesNecessariosController.text.trim(),
+      colunasGrid: _colunasGridController.text.trim(),
+      regrasNegocio: _regrasNegocioController.text.trim(),
+      integracoesEnvolvidas: _integracoesEnvolvidasController.text.trim(),
+      imagemTelaAtualPath: _arquivoAnexadoPath.isNotEmpty
+          ? _arquivoAnexadoPath
+          : _prototipoEmEdicao?.imagemTelaAtualPath ?? '',
+      documentacaoGerada: _prototipoEmEdicao?.documentacaoGerada ?? '',
+      htmlGerado: _prototipoEmEdicao?.htmlGerado ?? '',
+      arquivoHtmlLocal: _prototipoEmEdicao?.arquivoHtmlLocal ?? '',
+      createdAt: _prototipoEmEdicao?.createdAt ?? agora,
+      updatedAt: agora,
     );
 
-    _repository.salvar(prototipo);
+    await _repository.salvar(prototipo);
 
     setState(() {
       _ultimoPrototipoSalvo = prototipo;
+      _prototipoEmEdicao = null;
     });
+
+    await _carregarHistorico();
+
+    _tabController.animateTo(3);
 
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(
@@ -70,11 +126,353 @@ class _PrototipadorIaPageState extends State<PrototipadorIaPage>
     );
   }
 
+  void _novoPrototipo() {
+    _clienteController.clear();
+    _projetoMacroprocessoController.clear();
+    _numeroChamadoController.clear();
+    _tituloChamadoController.clear();
+    _vinculoChamadoController.clear();
+    _moduloMoController.clear();
+    _programaMoController.clear();
+    _nomeTelaController.clear();
+    _objetivoTelaController.clear();
+    _usuariosPrincipaisController.clear();
+
+    _descricaoDetalhadaController.clear();
+    _problemaAtualController.clear();
+    _resultadoEsperadoController.clear();
+    _camposNecessariosController.clear();
+    _filtrosNecessariosController.clear();
+    _botoesNecessariosController.clear();
+    _colunasGridController.clear();
+    _regrasNegocioController.clear();
+    _integracoesEnvolvidasController.clear();
+
+    setState(() {
+      _prioridadeSelecionada = 'Alta';
+      _ultimoPrototipoSalvo = null;
+      _prototipoEmEdicao = null;
+      _arquivoAnexadoPath = '';
+    });
+
+    _tabController.animateTo(0);
+    FocusScope.of(context).unfocus();
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('Formulário limpo para um novo protótipo.'),
+        backgroundColor: Color(0xFF2563EB),
+      ),
+    );
+  }
+
+  Future<void> _excluirUltimoPrototipoSalvo() async {
+    if (_ultimoPrototipoSalvo == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Nenhum protótipo salvo para excluir.'),
+          backgroundColor: Colors.orange,
+        ),
+      );
+      return;
+    }
+
+    final id = _ultimoPrototipoSalvo!.id;
+    await _repository.removerPorId(id);
+
+    setState(() {
+      _ultimoPrototipoSalvo = null;
+    });
+
+    await _carregarHistorico();
+
+    _tabController.animateTo(0);
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('Último protótipo salvo foi excluído.'),
+        backgroundColor: Color(0xFFDC2626),
+      ),
+    );
+  }
+
+  Future<void> _excluirPrototipoDoHistorico(PrototipoIa prototipo) async {
+    await _repository.removerPorId(prototipo.id);
+
+    setState(() {
+      if (_ultimoPrototipoSalvo?.id == prototipo.id) {
+        _ultimoPrototipoSalvo = null;
+      }
+    });
+
+    await _carregarHistorico();
+
+    _tabController.animateTo(3);
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('Protótipo removido do histórico com sucesso.'),
+        backgroundColor: Color(0xFFDC2626),
+      ),
+    );
+  }
+
+  Future<void> _editarPrototipoDoHistorico(PrototipoIa prototipo) async {
+    _clienteController.text = prototipo.cliente;
+    _projetoMacroprocessoController.text = prototipo.projetoMacroprocesso;
+    _numeroChamadoController.text = prototipo.numeroChamadoMo;
+    _tituloChamadoController.text = prototipo.tituloChamado;
+    _vinculoChamadoController.text = prototipo.vinculacaoChamado;
+    _moduloMoController.text = prototipo.moduloMo;
+    _programaMoController.text = prototipo.programaMoRelacionado;
+    _nomeTelaController.text = prototipo.nomeTelaFuncionalidade;
+    _objetivoTelaController.text = prototipo.objetivoTela;
+    _usuariosPrincipaisController.text = prototipo.usuariosPrincipais;
+
+    _descricaoDetalhadaController.text = prototipo.descricaoDetalhada;
+    _problemaAtualController.text = prototipo.problemaAtual;
+    _resultadoEsperadoController.text = prototipo.resultadoEsperado;
+    _camposNecessariosController.text = prototipo.camposNecessarios;
+    _filtrosNecessariosController.text = prototipo.filtrosNecessarios;
+    _botoesNecessariosController.text = prototipo.botoesNecessarios;
+    _colunasGridController.text = prototipo.colunasGrid;
+    _regrasNegocioController.text = prototipo.regrasNegocio;
+    _integracoesEnvolvidasController.text = prototipo.integracoesEnvolvidas;
+
+    setState(() {
+      _prioridadeSelecionada =
+      prototipo.prioridade.isEmpty ? 'Alta' : prototipo.prioridade;
+      _ultimoPrototipoSalvo = prototipo;
+      _prototipoEmEdicao = prototipo;
+    });
+
+    await _carregarHistorico();
+
+    _tabController.animateTo(0);
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('Protótipo carregado para edição.'),
+        backgroundColor: Color(0xFF2563EB),
+      ),
+    );
+  }
+
+  void _abrirAbaHistorico() {
+    _tabController.animateTo(3);
+  }
+
+  Future<void> _selecionarArquivoAnexo() async {
+    final resultado = await FilePicker.platform.pickFiles(
+      allowMultiple: false,
+      type: FileType.custom,
+      allowedExtensions: ['png', 'jpg', 'jpeg', 'pdf', 'doc', 'docx', 'txt'],
+    );
+
+    if (resultado == null || resultado.files.isEmpty) {
+      return;
+    }
+
+    final arquivo = resultado.files.first;
+    final caminho = arquivo.path ?? '';
+
+    if (caminho.isEmpty) {
+      if (!mounted) return;
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Não foi possível obter o caminho do arquivo selecionado.'),
+          backgroundColor: Colors.orange,
+        ),
+      );
+      return;
+    }
+
+    setState(() {
+      _arquivoAnexadoPath = caminho;
+    });
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text('Arquivo selecionado: ${arquivo.name}'),
+        backgroundColor: const Color(0xFF059669),
+      ),
+    );
+  }
+
+  Future _gerarDocumentacaoComIa() async {
+    final agora = DateTime.now();
+
+    final prototipoBase = PrototipoIa(
+      id: _prototipoEmEdicao?.id ?? agora.millisecondsSinceEpoch.toString(),
+      cliente: _clienteController.text.trim(),
+      projetoMacroprocesso: _projetoMacroprocessoController.text.trim(),
+      numeroChamadoMo: _numeroChamadoController.text.trim(),
+      tituloChamado: _tituloChamadoController.text.trim(),
+      vinculacaoChamado: _vinculoChamadoController.text.trim(),
+      moduloMo: _moduloMoController.text.trim(),
+      programaMoRelacionado: _programaMoController.text.trim(),
+      nomeTelaFuncionalidade: _nomeTelaController.text.trim(),
+      objetivoTela: _objetivoTelaController.text.trim(),
+      usuariosPrincipais: _usuariosPrincipaisController.text.trim(),
+      prioridade: _prioridadeSelecionada,
+      descricaoDetalhada: _descricaoDetalhadaController.text.trim(),
+      problemaAtual: _problemaAtualController.text.trim(),
+      resultadoEsperado: _resultadoEsperadoController.text.trim(),
+      camposNecessarios: _camposNecessariosController.text.trim(),
+      filtrosNecessarios: _filtrosNecessariosController.text.trim(),
+      botoesNecessarios: _botoesNecessariosController.text.trim(),
+      colunasGrid: _colunasGridController.text.trim(),
+      regrasNegocio: _regrasNegocioController.text.trim(),
+      integracoesEnvolvidas: _integracoesEnvolvidasController.text.trim(),
+      imagemTelaAtualPath: '',
+      documentacaoGerada: _prototipoEmEdicao?.documentacaoGerada ?? '',
+      htmlGerado: _prototipoEmEdicao?.htmlGerado ?? '',
+      arquivoHtmlLocal: _prototipoEmEdicao?.arquivoHtmlLocal ?? '',
+      createdAt: _prototipoEmEdicao?.createdAt ?? agora,
+      updatedAt: agora,
+    );
+
+    try {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Testando conexão com a OpenAI...'),
+          backgroundColor: Color(0xFF1D4ED8),
+        ),
+      );
+
+      const promptTeste =
+          'Responda apenas a frase: Conexão realizada com sucesso.';
+
+      final textoGerado = await _openAiService.gerarTexto(prompt: promptTeste);
+
+      final prototipoAtualizado = PrototipoIa(
+        id: prototipoBase.id,
+        cliente: prototipoBase.cliente,
+        projetoMacroprocesso: prototipoBase.projetoMacroprocesso,
+        numeroChamadoMo: prototipoBase.numeroChamadoMo,
+        tituloChamado: prototipoBase.tituloChamado,
+        vinculacaoChamado: prototipoBase.vinculacaoChamado,
+        moduloMo: prototipoBase.moduloMo,
+        programaMoRelacionado: prototipoBase.programaMoRelacionado,
+        nomeTelaFuncionalidade: prototipoBase.nomeTelaFuncionalidade,
+        objetivoTela: prototipoBase.objetivoTela,
+        usuariosPrincipais: prototipoBase.usuariosPrincipais,
+        prioridade: prototipoBase.prioridade,
+        descricaoDetalhada: prototipoBase.descricaoDetalhada,
+        problemaAtual: prototipoBase.problemaAtual,
+        resultadoEsperado: prototipoBase.resultadoEsperado,
+        camposNecessarios: prototipoBase.camposNecessarios,
+        filtrosNecessarios: prototipoBase.filtrosNecessarios,
+        botoesNecessarios: prototipoBase.botoesNecessarios,
+        colunasGrid: prototipoBase.colunasGrid,
+        regrasNegocio: prototipoBase.regrasNegocio,
+        integracoesEnvolvidas: prototipoBase.integracoesEnvolvidas,
+        imagemTelaAtualPath: '',
+        documentacaoGerada: textoGerado.trim(),
+        htmlGerado: '',
+        arquivoHtmlLocal: '',
+        createdAt: prototipoBase.createdAt,
+        updatedAt: DateTime.now(),
+      );
+
+      await _repository.salvar(prototipoAtualizado);
+
+      if (!mounted) return;
+
+      setState(() {
+        _ultimoPrototipoSalvo = prototipoAtualizado;
+        _prototipoEmEdicao = prototipoAtualizado;
+      });
+
+      await _carregarHistorico();
+      _tabController.animateTo(0);
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Conexão com a OpenAI testada com sucesso.'),
+          backgroundColor: Color(0xFF059669),
+        ),
+      );
+    } catch (e) {
+      if (!mounted) return;
+
+      final mensagemErro = e.toString().replaceFirst('Exception: ', '');
+
+      final prototipoErro = PrototipoIa(
+        id: prototipoBase.id,
+        cliente: prototipoBase.cliente,
+        projetoMacroprocesso: prototipoBase.projetoMacroprocesso,
+        numeroChamadoMo: prototipoBase.numeroChamadoMo,
+        tituloChamado: prototipoBase.tituloChamado,
+        vinculacaoChamado: prototipoBase.vinculacaoChamado,
+        moduloMo: prototipoBase.moduloMo,
+        programaMoRelacionado: prototipoBase.programaMoRelacionado,
+        nomeTelaFuncionalidade: prototipoBase.nomeTelaFuncionalidade,
+        objetivoTela: prototipoBase.objetivoTela,
+        usuariosPrincipais: prototipoBase.usuariosPrincipais,
+        prioridade: prototipoBase.prioridade,
+        descricaoDetalhada: prototipoBase.descricaoDetalhada,
+        problemaAtual: prototipoBase.problemaAtual,
+        resultadoEsperado: prototipoBase.resultadoEsperado,
+        camposNecessarios: prototipoBase.camposNecessarios,
+        filtrosNecessarios: prototipoBase.filtrosNecessarios,
+        botoesNecessarios: prototipoBase.botoesNecessarios,
+        colunasGrid: prototipoBase.colunasGrid,
+        regrasNegocio: prototipoBase.regrasNegocio,
+        integracoesEnvolvidas: prototipoBase.integracoesEnvolvidas,
+        imagemTelaAtualPath: '',
+        documentacaoGerada: mensagemErro,
+        htmlGerado: '',
+        arquivoHtmlLocal: '',
+        createdAt: prototipoBase.createdAt,
+        updatedAt: DateTime.now(),
+      );
+
+      await _repository.salvar(prototipoErro);
+
+      if (!mounted) return;
+
+      setState(() {
+        _ultimoPrototipoSalvo = prototipoErro;
+        _prototipoEmEdicao = prototipoErro;
+      });
+
+      await _carregarHistorico();
+      _tabController.animateTo(0);
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(mensagemErro),
+          backgroundColor: const Color(0xFFDC2626),
+        ),
+      );
+    }
+  }
+
   @override
   void dispose() {
+    _clienteController.dispose();
+    _projetoMacroprocessoController.dispose();
     _numeroChamadoController.dispose();
     _tituloChamadoController.dispose();
     _vinculoChamadoController.dispose();
+    _moduloMoController.dispose();
+    _programaMoController.dispose();
+    _nomeTelaController.dispose();
+    _objetivoTelaController.dispose();
+    _usuariosPrincipaisController.dispose();
+
+    _descricaoDetalhadaController.dispose();
+    _problemaAtualController.dispose();
+    _resultadoEsperadoController.dispose();
+    _camposNecessariosController.dispose();
+    _filtrosNecessariosController.dispose();
+    _botoesNecessariosController.dispose();
+    _colunasGridController.dispose();
+    _regrasNegocioController.dispose();
+    _integracoesEnvolvidasController.dispose();
+
     _tabController.dispose();
     super.dispose();
   }
@@ -83,6 +481,7 @@ class _PrototipadorIaPageState extends State<PrototipadorIaPage>
   void initState() {
     super.initState();
     _tabController = TabController(length: 4, vsync: this);
+    _carregarHistorico();
   }
 
   InputDecoration _inputDecoration({
@@ -232,19 +631,36 @@ class _PrototipadorIaPageState extends State<PrototipadorIaPage>
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Row(
+          Row(
             children: [
-              Icon(
+              const Icon(
                 Icons.check_circle_outline,
                 color: Color(0xFF059669),
               ),
-              SizedBox(width: 8),
-              Text(
-                'Último protótipo salvo',
-                style: TextStyle(
-                  fontSize: 16,
-                  fontWeight: FontWeight.w800,
-                  color: Color(0xFF065F46),
+              const SizedBox(width: 8),
+              const Expanded(
+                child: Text(
+                  'Último protótipo salvo',
+                  style: TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w800,
+                    color: Color(0xFF065F46),
+                  ),
+                ),
+              ),
+              TextButton.icon(
+                onPressed: _excluirUltimoPrototipoSalvo,
+                icon: const Icon(
+                  Icons.delete_outline,
+                  color: Color(0xFFB91C1C),
+                  size: 18,
+                ),
+                label: const Text(
+                  'Excluir',
+                  style: TextStyle(
+                    color: Color(0xFFB91C1C),
+                    fontWeight: FontWeight.w700,
+                  ),
                 ),
               ),
             ],
@@ -273,6 +689,22 @@ class _PrototipadorIaPageState extends State<PrototipadorIaPage>
               color: Color(0xFF065F46),
             ),
           ),
+          const SizedBox(height: 6),
+          Text(
+            'Nome da tela: ${_ultimoPrototipoSalvo!.nomeTelaFuncionalidade.isEmpty ? 'Não informado' : _ultimoPrototipoSalvo!.nomeTelaFuncionalidade}',
+            style: const TextStyle(
+              fontSize: 14,
+              color: Color(0xFF065F46),
+            ),
+          ),
+          const SizedBox(height: 6),
+          Text(
+            'Problema atual: ${_ultimoPrototipoSalvo!.problemaAtual.isEmpty ? 'Não informado' : _ultimoPrototipoSalvo!.problemaAtual}',
+            style: const TextStyle(
+              fontSize: 14,
+              color: Color(0xFF065F46),
+            ),
+          ),
         ],
       ),
     );
@@ -285,6 +717,7 @@ class _PrototipadorIaPageState extends State<PrototipadorIaPage>
       child: Column(
         children: [
           TextField(
+            controller: _clienteController,
             decoration: _inputDecoration(
               label: 'Cliente',
               hint: 'Selecione ou informe o cliente',
@@ -293,6 +726,7 @@ class _PrototipadorIaPageState extends State<PrototipadorIaPage>
           ),
           const SizedBox(height: 12),
           TextField(
+            controller: _projetoMacroprocessoController,
             decoration: _inputDecoration(
               label: 'Projeto / Macroprocesso',
               hint: 'Ex.: Implantação PCP',
@@ -329,6 +763,7 @@ class _PrototipadorIaPageState extends State<PrototipadorIaPage>
           ),
           const SizedBox(height: 12),
           TextField(
+            controller: _moduloMoController,
             decoration: _inputDecoration(
               label: 'Módulo M&O',
               hint: 'Ex.: Produção, Estoque, Qualidade',
@@ -337,6 +772,7 @@ class _PrototipadorIaPageState extends State<PrototipadorIaPage>
           ),
           const SizedBox(height: 12),
           TextField(
+            controller: _programaMoController,
             decoration: _inputDecoration(
               label: 'Programa M&O relacionado',
               hint: 'Informe o programa relacionado',
@@ -345,6 +781,7 @@ class _PrototipadorIaPageState extends State<PrototipadorIaPage>
           ),
           const SizedBox(height: 12),
           TextField(
+            controller: _nomeTelaController,
             decoration: _inputDecoration(
               label: 'Nome da tela ou funcionalidade',
               hint: 'Ex.: Painel de Apontamento',
@@ -353,6 +790,7 @@ class _PrototipadorIaPageState extends State<PrototipadorIaPage>
           ),
           const SizedBox(height: 12),
           TextField(
+            controller: _objetivoTelaController,
             maxLines: 2,
             decoration: _inputDecoration(
               label: 'Objetivo da tela',
@@ -362,6 +800,7 @@ class _PrototipadorIaPageState extends State<PrototipadorIaPage>
           ),
           const SizedBox(height: 12),
           TextField(
+            controller: _usuariosPrincipaisController,
             decoration: _inputDecoration(
               label: 'Usuários principais',
               hint: 'Ex.: PCP, liderança, analistas',
@@ -403,6 +842,7 @@ class _PrototipadorIaPageState extends State<PrototipadorIaPage>
       child: Column(
         children: [
           TextField(
+            controller: _descricaoDetalhadaController,
             maxLines: 4,
             decoration: _inputDecoration(
               label: 'Descrição detalhada da necessidade',
@@ -412,6 +852,7 @@ class _PrototipadorIaPageState extends State<PrototipadorIaPage>
           ),
           const SizedBox(height: 12),
           TextField(
+            controller: _problemaAtualController,
             maxLines: 3,
             decoration: _inputDecoration(
               label: 'Problema atual',
@@ -421,6 +862,7 @@ class _PrototipadorIaPageState extends State<PrototipadorIaPage>
           ),
           const SizedBox(height: 12),
           TextField(
+            controller: _resultadoEsperadoController,
             maxLines: 3,
             decoration: _inputDecoration(
               label: 'Resultado esperado',
@@ -430,6 +872,7 @@ class _PrototipadorIaPageState extends State<PrototipadorIaPage>
           ),
           const SizedBox(height: 12),
           TextField(
+            controller: _camposNecessariosController,
             maxLines: 2,
             decoration: _inputDecoration(
               label: 'Campos necessários',
@@ -439,6 +882,7 @@ class _PrototipadorIaPageState extends State<PrototipadorIaPage>
           ),
           const SizedBox(height: 12),
           TextField(
+            controller: _filtrosNecessariosController,
             maxLines: 2,
             decoration: _inputDecoration(
               label: 'Filtros necessários',
@@ -448,6 +892,7 @@ class _PrototipadorIaPageState extends State<PrototipadorIaPage>
           ),
           const SizedBox(height: 12),
           TextField(
+            controller: _botoesNecessariosController,
             maxLines: 2,
             decoration: _inputDecoration(
               label: 'Botões necessários',
@@ -457,6 +902,7 @@ class _PrototipadorIaPageState extends State<PrototipadorIaPage>
           ),
           const SizedBox(height: 12),
           TextField(
+            controller: _colunasGridController,
             maxLines: 2,
             decoration: _inputDecoration(
               label: 'Colunas do grid',
@@ -466,6 +912,7 @@ class _PrototipadorIaPageState extends State<PrototipadorIaPage>
           ),
           const SizedBox(height: 12),
           TextField(
+            controller: _regrasNegocioController,
             maxLines: 3,
             decoration: _inputDecoration(
               label: 'Regras de negócio / observações',
@@ -475,6 +922,7 @@ class _PrototipadorIaPageState extends State<PrototipadorIaPage>
           ),
           const SizedBox(height: 12),
           TextField(
+            controller: _integracoesEnvolvidasController,
             maxLines: 2,
             decoration: _inputDecoration(
               label: 'Integrações envolvidas',
@@ -483,42 +931,48 @@ class _PrototipadorIaPageState extends State<PrototipadorIaPage>
             ),
           ),
           const SizedBox(height: 16),
-          Container(
-            width: double.infinity,
-            padding: const EdgeInsets.all(16),
-            decoration: BoxDecoration(
-              color: const Color(0xFFF9FAFB),
-              borderRadius: BorderRadius.circular(16),
-              border: Border.all(
-                color: const Color(0xFFD1D5DB),
-                style: BorderStyle.solid,
+          InkWell(
+            onTap: _selecionarArquivoAnexo,
+            borderRadius: BorderRadius.circular(16),
+            child: Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: const Color(0xFFF9FAFB),
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(
+                  color: const Color(0xFFD1D5DB),
+                  style: BorderStyle.solid,
+                ),
               ),
-            ),
-            child: const Column(
-              children: [
-                Icon(
-                  Icons.image_outlined,
-                  size: 36,
-                  color: Color(0xFF6B7280),
-                ),
-                SizedBox(height: 10),
-                Text(
-                  'Anexar imagem da tela atual',
-                  style: TextStyle(
-                    fontWeight: FontWeight.w700,
-                    color: Color(0xFF111827),
-                  ),
-                ),
-                SizedBox(height: 6),
-                Text(
-                  'Área visual simulada para upload de imagem nesta fase inicial.',
-                  textAlign: TextAlign.center,
-                  style: TextStyle(
-                    fontSize: 13,
+              child: Column(
+                children: [
+                  const Icon(
+                    Icons.attach_file_outlined,
+                    size: 36,
                     color: Color(0xFF6B7280),
                   ),
-                ),
-              ],
+                  const SizedBox(height: 10),
+                  const Text(
+                    'Anexar arquivo para análise',
+                    style: TextStyle(
+                      fontWeight: FontWeight.w700,
+                      color: Color(0xFF111827),
+                    ),
+                  ),
+                  const SizedBox(height: 6),
+                  Text(
+                    _arquivoAnexadoPath.isEmpty
+                        ? 'Clique para selecionar imagem, PDF, DOC, DOCX ou TXT.'
+                        : 'Arquivo selecionado:\n$_arquivoAnexadoPath',
+                    textAlign: TextAlign.center,
+                    style: const TextStyle(
+                      fontSize: 13,
+                      color: Color(0xFF6B7280),
+                    ),
+                  ),
+                ],
+              ),
             ),
           ),
         ],
@@ -559,12 +1013,14 @@ class _PrototipadorIaPageState extends State<PrototipadorIaPage>
           icon: Icons.add_circle_outline,
           backgroundColor: const Color(0xFFE5E7EB),
           foregroundColor: const Color(0xFF111827),
+          onPressed: _novoPrototipo,
         ),
         button(
           label: 'Gerar com IA',
           icon: Icons.auto_awesome,
           backgroundColor: const Color(0xFF1D4ED8),
           foregroundColor: Colors.white,
+          onPressed: _gerarDocumentacaoComIa,
         ),
         button(
           label: 'Salvar no Projeto',
@@ -596,67 +1052,93 @@ class _PrototipadorIaPageState extends State<PrototipadorIaPage>
           icon: Icons.history,
           backgroundColor: const Color(0xFF374151),
           foregroundColor: Colors.white,
+          onPressed: _abrirAbaHistorico,
         ),
       ],
     );
   }
 
   Widget _buildDocumentacaoTab() {
+    final textoDocumentacao =
+        _prototipoEmEdicao?.documentacaoGerada ??
+            _ultimoPrototipoSalvo?.documentacaoGerada ??
+            '';
+
+    final temConteudo = textoDocumentacao.trim().isNotEmpty;
+
     return SingleChildScrollView(
       padding: const EdgeInsets.all(20),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
-        children: const [
-          _ResultadoSecao(
-            titulo: 'Visão geral',
-            conteudo:
-            'Tela proposta para centralizar lançamentos, consultas e acompanhamento operacional do módulo M&O, reduzindo retrabalho e aumentando a rastreabilidade.',
+        children: [
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: const Color(0xFFEFF6FF),
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(color: const Color(0xFFBFDBFE)),
+            ),
+            child: const Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Documentação para DEV',
+                  style: TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w800,
+                    color: Color(0xFF1E3A8A),
+                  ),
+                ),
+                SizedBox(height: 6),
+                Text(
+                  'Nesta etapa estamos exibindo apenas o retorno bruto da OpenAI para validar a conexão.',
+                  style: TextStyle(
+                    fontSize: 13,
+                    color: Color(0xFF1D4ED8),
+                    height: 1.4,
+                  ),
+                ),
+              ],
+            ),
           ),
-          _ResultadoSecao(
-            titulo: 'Objetivo',
-            conteudo:
-            'Disponibilizar uma interface simples para registrar eventos, consultar status e apoiar decisões operacionais com mais agilidade.',
-          ),
-          _ResultadoSecao(
-            titulo: 'Usuários envolvidos',
-            conteudo:
-            'Analistas, coordenadores, consultores e responsáveis pelo processo operacional.',
-          ),
-          _ResultadoSecao(
-            titulo: 'Campos e filtros',
-            conteudo:
-            'Cliente, projeto, data, status, responsável, tipo de ocorrência, prioridade e período.',
-          ),
-          _ResultadoSecao(
-            titulo: 'Grid / colunas',
-            conteudo:
-            'Código, descrição, cliente, responsável, status, prioridade, data de criação e última atualização.',
-          ),
-          _ResultadoSecao(
-            titulo: 'Botões e ações',
-            conteudo:
-            'Novo, editar, salvar, duplicar, exportar, gerar análise IA e visualizar histórico.',
-          ),
-          _ResultadoSecao(
-            titulo: 'Regras de negócio',
-            conteudo:
-            'A tela deve obrigatoriamente estar vinculada a um cliente; o registro pode ser associado a projeto, tarefa, chamado M&O ou SIPOC.',
-          ),
-          _ResultadoSecao(
-            titulo: 'Integrações',
-            conteudo:
-            'Integração futura com base local do sistema, entidades de clientes, projetos e motor de IA.',
-          ),
-          _ResultadoSecao(
-            titulo: 'Benefícios',
-            conteudo:
-            'Padronização da documentação, ganho de produtividade, redução de ambiguidades e mais velocidade para o time de desenvolvimento.',
-          ),
-          _ResultadoSecao(
-            titulo: 'Critérios de aceite',
-            conteudo:
-            'Permitir preenchimento completo do briefing, visualização do retorno da IA, armazenamento de versões e acesso ao HTML gerado.',
-          ),
+          const SizedBox(height: 16),
+          if (!temConteudo)
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(20),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(color: const Color(0xFFE5E7EB)),
+              ),
+              child: const Text(
+                'Nenhum retorno da IA ainda.\n\nClique em "Gerar com IA" para testar a conexão com a OpenAI.',
+                style: TextStyle(
+                  fontSize: 14,
+                  height: 1.5,
+                  color: Color(0xFF4B5563),
+                ),
+              ),
+            )
+          else
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(20),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(color: const Color(0xFFE5E7EB)),
+              ),
+              child: SelectableText(
+                textoDocumentacao.trim(),
+                style: const TextStyle(
+                  fontSize: 14,
+                  height: 1.6,
+                  color: Color(0xFF111827),
+                ),
+              ),
+            ),
         ],
       ),
     );
@@ -899,27 +1381,141 @@ class _PrototipadorIaPageState extends State<PrototipadorIaPage>
   }
 
   Widget _buildHistoricoTab() {
-    return ListView(
+    if (_historicoPrototipos.isEmpty) {
+      return const Center(
+        child: Padding(
+          padding: EdgeInsets.all(24),
+          child: Text(
+            'Nenhum protótipo salvo até o momento.',
+            style: TextStyle(
+              fontSize: 14,
+              color: Color(0xFF6B7280),
+            ),
+          ),
+        ),
+      );
+    }
+
+    final historicoOrdenado = _historicoPrototipos.reversed.toList();
+
+    return ListView.separated(
       padding: const EdgeInsets.all(20),
-      children: const [
-        _HistoricoTile(
-          versao: 'Versão 3',
-          data: '06/07/2026 19:10',
-          descricao: 'Ajuste nas regras de negócio e inclusão de filtros por período.',
-        ),
-        SizedBox(height: 12),
-        _HistoricoTile(
-          versao: 'Versão 2',
-          data: '06/07/2026 18:42',
-          descricao: 'Inclusão do grid operacional e melhoria nos botões de ação.',
-        ),
-        SizedBox(height: 12),
-        _HistoricoTile(
-          versao: 'Versão 1',
-          data: '06/07/2026 18:05',
-          descricao: 'Primeira geração simulada da documentação e do HTML.',
-        ),
-      ],
+      itemCount: historicoOrdenado.length,
+      separatorBuilder: (_, __) => const SizedBox(height: 12),
+      itemBuilder: (context, index) {
+        final item = historicoOrdenado[index];
+
+        return Container(
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            color: _ultimoPrototipoSalvo?.id == item.id
+                ? const Color(0xFFECFDF5)
+                : const Color(0xFFF9FAFB),
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(
+              color: _ultimoPrototipoSalvo?.id == item.id
+                  ? const Color(0xFFA7F3D0)
+                  : const Color(0xFFE5E7EB),
+            ),
+          ),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              CircleAvatar(
+                backgroundColor: _ultimoPrototipoSalvo?.id == item.id
+                    ? const Color(0xFFD1FAE5)
+                    : const Color(0xFFEFF6FF),
+                child: Icon(
+                  _ultimoPrototipoSalvo?.id == item.id ? Icons.check : Icons.history,
+                  color: _ultimoPrototipoSalvo?.id == item.id
+                      ? const Color(0xFF059669)
+                      : const Color(0xFF1D4ED8),
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    if (_ultimoPrototipoSalvo?.id == item.id) ...[
+                      Container(
+                        margin: const EdgeInsets.only(bottom: 8),
+                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFD1FAE5),
+                          borderRadius: BorderRadius.circular(999),
+                        ),
+                        child: const Text(
+                          'Último salvo',
+                          style: TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w700,
+                            color: Color(0xFF065F46),
+                          ),
+                        ),
+                      ),
+                    ],
+                    Text(
+                      item.nomeTelaFuncionalidade.isEmpty
+                          ? 'Protótipo sem nome'
+                          : item.nomeTelaFuncionalidade,
+                      style: const TextStyle(
+                        fontWeight: FontWeight.w700,
+                        color: Color(0xFF111827),
+                      ),
+                    ),
+                    const SizedBox(height: 6),
+                    Text(
+                      'Cliente: ${item.cliente.isEmpty ? 'Não informado' : item.cliente}',
+                      style: const TextStyle(
+                        fontSize: 13,
+                        color: Color(0xFF4B5563),
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      'Chamado M&O: ${item.numeroChamadoMo.isEmpty ? 'Não informado' : item.numeroChamadoMo}',
+                      style: const TextStyle(
+                        fontSize: 13,
+                        color: Color(0xFF4B5563),
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      'Problema atual: ${item.problemaAtual.isEmpty ? 'Não informado' : item.problemaAtual}',
+                      style: const TextStyle(
+                        fontSize: 13,
+                        color: Color(0xFF4B5563),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 12),
+              Column(
+                children: [
+                  IconButton(
+                    onPressed: () => _editarPrototipoDoHistorico(item),
+                    icon: const Icon(
+                      Icons.edit_outlined,
+                      color: Color(0xFF2563EB),
+                    ),
+                    tooltip: 'Editar protótipo',
+                  ),
+                  IconButton(
+                    onPressed: () => _excluirPrototipoDoHistorico(item),
+                    icon: const Icon(
+                      Icons.delete_outline,
+                      color: Color(0xFFB91C1C),
+                    ),
+                    tooltip: 'Excluir protótipo',
+                  ),
+                ],
+              ),
+            ],
+          ),
+        );
+      },
     );
   }
 
@@ -989,7 +1585,7 @@ class _PrototipadorIaPageState extends State<PrototipadorIaPage>
               Tab(text: 'Documentação para DEV'),
               Tab(text: 'Protótipo HTML'),
               Tab(text: 'Arquivos'),
-              Tab(text: 'Histórico'),
+              Tab(text: 'Histórico (teste)'),
             ],
           ),
           SizedBox(
@@ -1061,6 +1657,40 @@ class _PrototipadorIaPageState extends State<PrototipadorIaPage>
               const SizedBox(height: 20),
               _buildUltimoPrototipoSalvoCard(),
               if (_ultimoPrototipoSalvo != null) const SizedBox(height: 20),
+              if (_prototipoEmEdicao != null)
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFEFF6FF),
+                    borderRadius: BorderRadius.circular(18),
+                    border: Border.all(color: const Color(0xFFBFDBFE)),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text(
+                        'Modo edição ativo',
+                        style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w800,
+                          color: Color(0xFF1D4ED8),
+                        ),
+                      ),
+                      const SizedBox(height: 6),
+                      Text(
+                        _prototipoEmEdicao!.nomeTelaFuncionalidade.isEmpty
+                            ? 'Você está editando um protótipo salvo.'
+                            : 'Você está editando: ${_prototipoEmEdicao!.nomeTelaFuncionalidade}',
+                        style: const TextStyle(
+                          fontSize: 14,
+                          color: Color(0xFF1E3A8A),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              if (_prototipoEmEdicao != null) const SizedBox(height: 20),
               _buildActionButtons(),
               const SizedBox(height: 20),
               LayoutBuilder(

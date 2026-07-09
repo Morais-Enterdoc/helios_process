@@ -246,6 +246,38 @@ class AppDatabase {
     ''');
 
     await db.execute('''
+      CREATE TABLE IF NOT EXISTS prototipos_ia (
+        id TEXT PRIMARY KEY,
+        cliente TEXT NOT NULL,
+        projeto_macroprocesso TEXT,
+        numero_chamado_mo TEXT,
+        titulo_chamado TEXT,
+        vinculacao_chamado TEXT,
+        modulo_mo TEXT,
+        programa_mo_relacionado TEXT,
+        nome_tela_funcionalidade TEXT NOT NULL,
+        objetivo_tela TEXT,
+        usuarios_principais TEXT,
+        prioridade TEXT NOT NULL,
+        descricao_detalhada TEXT,
+        problema_atual TEXT,
+        resultado_esperado TEXT,
+        campos_necessarios TEXT,
+        filtros_necessarios TEXT,
+        botoes_necessarios TEXT,
+        colunas_grid TEXT,
+        regras_negocio TEXT,
+        integracoes_envolvidas TEXT,
+        imagem_tela_atual_path TEXT,
+        documentacao_gerada TEXT,
+        html_gerado TEXT,
+        arquivo_html_local TEXT,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      )
+    ''');
+
+    await db.execute('''
       CREATE UNIQUE INDEX IF NOT EXISTS idx_chamados_ticket
       ON chamados(ticket);
     ''');

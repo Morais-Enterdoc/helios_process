@@ -19,6 +19,7 @@ import '../../tarefas/domain/tarefa_detalhe.dart';
 import '../../agenda/domain/agenda_manual.dart';
 import '../../timeline/presentation/timeline_page.dart';
 import '../../prototipador_ia/presentation/prototipador_ia_page.dart';
+import '../../manual_ia/presentation/manual_ia_page.dart';
 
 bool menuRecolhido = false;
 
@@ -1041,6 +1042,8 @@ class _HomePageState extends State<HomePage> {
 
       case 'prototipador_ia':
         return const PrototipadorIaPage();
+      case 'manual_ia':
+        return const ManualIaPage();
       case 'dashboard':
       default:
 

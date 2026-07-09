@@ -52,70 +52,77 @@ class AppMenu extends StatelessWidget {
               child: ListView(
                 padding: const EdgeInsets.symmetric(vertical: 4),
                 children: [
-                  _MenuItem(
+                  MenuItem(
                     icon: Icons.dashboard_outlined,
                     label: 'Dashboard',
                     selected: selectedItem == 'dashboard',
                     isCollapsed: isCollapsed,
                     onTap: () => onItemSelected('dashboard'),
                   ),
-                  _MenuItem(
+                  MenuItem(
                     icon: Icons.task_alt,
                     label: 'Tarefas',
                     selected: selectedItem == 'tarefas',
                     isCollapsed: isCollapsed,
                     onTap: () => onItemSelected('tarefas'),
                   ),
-                  _MenuItem(
+                  MenuItem(
                     icon: Icons.timeline_rounded,
                     label: 'Cronograma',
                     selected: selectedItem == 'cronograma',
                     isCollapsed: isCollapsed,
                     onTap: () => onItemSelected('cronograma'),
                   ),
-                  _MenuItem(
+                  MenuItem(
                     icon: Icons.view_timeline_outlined,
                     label: 'Timeline',
                     selected: selectedItem == 'timeline',
                     isCollapsed: isCollapsed,
                     onTap: () => onItemSelected('timeline'),
                   ),
-                  _MenuItem(
+                  MenuItem(
                     icon: Icons.calendar_month_outlined,
                     label: 'Agenda',
                     selected: selectedItem == 'agenda',
                     isCollapsed: isCollapsed,
                     onTap: () => onItemSelected('agenda'),
                   ),
-                  _MenuItem(
+                  MenuItem(
                     icon: Icons.assignment_outlined,
-                    label: 'Chamados M&O',
+                    label: 'Chamados MO',
                     selected: selectedItem == 'chamados',
                     isCollapsed: isCollapsed,
                     onTap: () => onItemSelected('chamados'),
                   ),
-                  _MenuItem(
+                  MenuItem(
                     icon: Icons.schema_outlined,
                     label: 'SIPOC',
                     selected: selectedItem == 'sipoc',
                     isCollapsed: isCollapsed,
                     onTap: () => onItemSelected('sipoc'),
                   ),
-                  _MenuItem(
-                    icon: Icons.analytics_outlined,
-                    label: 'Insights IA',
-                    selected: selectedItem == 'insights',
-                    isCollapsed: isCollapsed,
-                    onTap: () {},
-                  ),
-                  _MenuItem(
+                  MenuItem(
                     icon: Icons.auto_awesome_outlined,
                     label: 'Prototipador IA',
                     selected: selectedItem == 'prototipador_ia',
                     isCollapsed: isCollapsed,
                     onTap: () => onItemSelected('prototipador_ia'),
                   ),
-                  _MenuItem(
+                  MenuItem(
+                    icon: Icons.menu_book_outlined,
+                    label: 'Manual IA',
+                    selected: selectedItem == 'manual_ia',
+                    isCollapsed: isCollapsed,
+                    onTap: () => onItemSelected('manual_ia'),
+                  ),
+                  MenuItem(
+                    icon: Icons.analytics_outlined,
+                    label: 'Insights IA',
+                    selected: selectedItem == 'insights',
+                    isCollapsed: isCollapsed,
+                    onTap: () => onItemSelected('insights'),
+                  ),
+                  MenuItem(
                     icon: Icons.business_outlined,
                     label: 'Clientes',
                     selected: selectedItem == 'clientes',
@@ -132,14 +139,15 @@ class AppMenu extends StatelessWidget {
   }
 }
 
-class _MenuItem extends StatelessWidget {
+class MenuItem extends StatelessWidget {
   final IconData icon;
   final String label;
   final bool selected;
   final bool isCollapsed;
   final VoidCallback onTap;
 
-  const _MenuItem({
+  const MenuItem({
+    super.key,
     required this.icon,
     required this.label,
     required this.selected,
@@ -163,8 +171,9 @@ class _MenuItem extends StatelessWidget {
               vertical: 12,
             ),
             child: Row(
-              mainAxisAlignment:
-              isCollapsed ? MainAxisAlignment.center : MainAxisAlignment.start,
+              mainAxisAlignment: isCollapsed
+                  ? MainAxisAlignment.center
+                  : MainAxisAlignment.start,
               children: [
                 Icon(
                   icon,
